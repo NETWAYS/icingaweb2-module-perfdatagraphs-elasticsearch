@@ -1,0 +1,6 @@
+Name: PerfdataGraphs Elasticsearch Backend
+Version: 0.1.0
+Requires:
+  Modules: perfdatagraphs
+Description: Elasticsearch Backend for Icinga Web Performance Data Graphs
+ This module can fetch data from Elasticsearch for Icinga Web Performance Data Graphs
