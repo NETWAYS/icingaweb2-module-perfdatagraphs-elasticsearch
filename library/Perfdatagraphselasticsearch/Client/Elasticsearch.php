@@ -2,17 +2,20 @@
 
 namespace Icinga\Module\Perfdatagraphselasticsearch\Client;
 
+use Icinga\Module\Perfdatagraphselasticsearch\Transport\Transport;
+use Icinga\Module\Perfdatagraphselasticsearch\Transport\HostPool;
+
 use Icinga\Module\Perfdatagraphs\Model\PerfdataResponse;
 use Icinga\Module\Perfdatagraphs\Model\PerfdataSet;
 use Icinga\Module\Perfdatagraphs\Model\PerfdataSeries;
 
 use Icinga\Application\Config;
 use Icinga\Application\Logger;
+use Icinga\Util\Json;
 
 use GuzzleHttp\Client;
-use GuzzleHttp\Psr7\Response;
-use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Query;
 
 use DateInterval;
 use DateTime;
@@ -23,27 +26,37 @@ use Exception;
  */
 class Elasticsearch
 {
-    protected $client = null;
+    protected $transport = null;
 
-    protected string $index;
+    // TODO: Currently unsed
+    protected int $maxDataPoints;
 
     public function __construct(
         string $urls,
-        string $index,
         string $username,
         string $password,
+        int $maxDataPoints,
         int $timeout,
         bool $tlsVerify,
     ) {
-        // TODO: We need a custom Client that can handle multiple hosts
-        // $u = explode(',', $urls);
+        $u = explode(',', $urls);
 
-        $this->client = new Client([
-            'base_uri' => $urls,
+        $HTTPClient = new Client([
             'timeout' => $timeout,
-            'auth' => [$username, $password],
             'verify' => $tlsVerify
         ]);
+
+        $pool = new HostPool($HTTPClient);
+        $pool->setHosts($u);
+        $transport = new Transport($HTTPClient, $pool);
+
+        if (isset($username)) {
+            $transport->setBasicAuth($username, $password = '');
+        }
+
+        $this->transport = $transport;
+
+        $this->maxDataPoints = $maxDataPoints;
     }
 
     protected function isIncluded($metricname, array $includeMetrics = []): bool
@@ -75,6 +88,59 @@ class Elasticsearch
         return false;
     }
 
+    protected function createQuery(array $params): string
+    {
+        return Query::build($params);
+    }
+
+    protected function extractArgument(array &$params, string $arg): mixed
+    {
+        if (array_key_exists($arg, $params) === true) {
+            $value = $params[$arg];
+            $value = (is_object($value) && !is_iterable($value)) ?
+                (array) $value :
+                $value;
+            unset($params[$arg]);
+            return $value;
+        } else {
+            return null;
+        }
+    }
+
+    public function search(array $params = [])
+    {
+        $index = $this->extractArgument($params, 'index');
+        $body = $this->extractArgument($params, 'body');
+
+        $query = $this->createQuery($params);
+
+        $uri = isset($index) ? "/$index/_search" : '_search';
+        $uri = $uri . '?' . $query;
+        $method = isset($body) ? 'POST' : 'GET';
+
+        $body = isset($body) ? Json::encode($body) : null;
+
+        $req = new Request($method, $uri, [], $body);
+
+        $response = $this->transport->sendRequest($req);
+        $responseBody = $response->getBody()->getContents();
+
+        try {
+            $d = Json::decode($responseBody, true);
+        } catch (JsonDecodeException $e) {
+            // TODO: Logger::error
+            return [];
+        }
+
+        return $d;
+    }
+
+    protected function normalizeCheckcommand(string $name)
+    {
+        // TODO: Needs the same normalization is the Writer uses
+        return $name;
+    }
+
     /**
      * request calls the Opensearch HTTP API, decodes and returns the data.
      *
@@ -87,7 +153,7 @@ class Elasticsearch
      * @param array $excludeMetrics metrics that are excluded
      * @return PerfdataResponse
      */
-    public function search(
+    public function fetchMetrics(
         string $hostName,
         string $serviceName,
         string $checkCommand,
@@ -96,7 +162,7 @@ class Elasticsearch
         array $includeMetrics,
         array $excludeMetrics,
     ): PerfdataResponse {
-        $query = [
+        $params = [
             'body' => [
                 // Still might cause an out-out-memory, but a lower value means more HTTP requests to the API
                 'size' => 2000,
@@ -118,7 +184,7 @@ class Elasticsearch
 
         // If it's a hostalive check we dont need the service term
         if ($isHostCheck) {
-            $query['body']['query']['bool']['must'] = [
+            $params['body']['query']['bool']['must'] = [
                             [ 'term' => [ 'host.name' => $hostName ] ],
             ];
         }
@@ -132,26 +198,19 @@ class Elasticsearch
         $criticals = [];
         $units = [];
 
-        $indexName = '/metrics-icinga2.' . $checkCommand . '-default/_search';
+        $indexName = '/metrics-icinga2.' . $this->normalizeCheckcommand($checkCommand) . '-default/_search';
 
         do {
             if ($searchAfter !== null) {
-                $query['body']['search_after'] = [$searchAfter];
+                $params['body']['search_after'] = [$searchAfter];
             }
 
-            $resp = $this->client->request('POST', $indexName, [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                ],
-                'json' => $query['body']
-            ]);
+            $response = $this->search($params);
 
-            $response = json_decode($resp->getBody(), true);
-
-            $hits = $response['hits']['hits'];
+            $hits = $response['hits']['hits'] ?? [];
 
             foreach ($hits as $d) {
-                $perfdata = $d['_source']['perfdata'];
+                $perfdata = $d['_source']['perfdata'] ?? [];
 
                 foreach ($perfdata as $label => $metric) {
                     if (!$this->isIncluded($label, $includeMetrics)) {
@@ -166,22 +225,12 @@ class Elasticsearch
                         $values[$label] = [];
                     }
 
-                    $values[$label][] = $metric['value'];
-
+                    $values[$label][] = $metric['value'] ?? null;
                     $date = new DateTime($d['_source']['@timestamp']);
                     $timestamps[$label][] = $date->getTimestamp();
-
-                    if (array_key_exists('unit', $metric)) {
-                        $units[$label][] = $metric['unit'];
-                    }
-
-                    if (array_key_exists('warn', $metric)) {
-                        $warnings[$label][] = $metric['warn'];
-                    }
-
-                    if (array_key_exists('crit', $metric)) {
-                        $criticals[$label][] = $metric['crit'];
-                    }
+                    $warnings[$label][] = $metric['warn'] ?? null;
+                    $criticals[$label][] = $metric['crit'] ?? null;
+                    $units[$label][] = $metric['unit'] ?? '';
                 }
             }
 
@@ -268,7 +317,7 @@ class Elasticsearch
         $default = [
             'api_url' => 'http://localhost:9200',
             'api_timeout' => 10,
-            'api_index' => 'icinga2',
+            'api_max_data_points' => 10000,
             'api_username' => '',
             'api_password' => '',
             'api_tls_insecure' => false,
@@ -287,11 +336,12 @@ class Elasticsearch
 
         $baseURI = rtrim($moduleConfig->get('elasticsearch', 'api_url', $default['api_url']), '/');
         $timeout = (int) $moduleConfig->get('elasticsearch', 'api_timeout', $default['api_timeout']);
-        $index = $moduleConfig->get('elasticsearch', 'api_index', $default['api_index']);
+        $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
         $username = $moduleConfig->get('elasticsearch', 'api_username', $default['api_username']);
         $password = $moduleConfig->get('elasticsearch', 'api_password', $default['api_password']);
-        $tlsVerify = (bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
+        // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
+        $tlsVerify = !(bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
 
-        return new static($baseURI, $index, $username, $password, $timeout, $tlsVerify);
+        return new static($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify);
     }
 }

@@ -29,11 +29,11 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
             'placeholder' => 'http://node2:9200,http://node2:9200',
         ]);
 
-        $this->addElement('text', 'elasticsearch_api_index', [
-            'label' => t('Name of the index to query'),
-            'description' => t('Name of the index configured in Icinga'),
-            'required' => true,
-        ]);
+        // $this->addElement('text', 'elasticsearch_api_index', [
+        //     'label' => t('Name of the index to query'),
+        //     'description' => t('Name of the index configured in Icinga'),
+        //     'required' => true,
+        // ]);
 
         $this->addElement('text', 'elasticsearch_api_username', [
             'label' => t('API basic auth username'),

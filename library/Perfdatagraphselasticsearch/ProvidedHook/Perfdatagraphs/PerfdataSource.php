@@ -39,7 +39,7 @@ class PerfdataSource extends PerfdataSourceHook
 
         // Let's fetch the data from the Elasticsearch API
         try {
-            $perfdataresponse = $client->search(
+            $perfdataresponse = $client->fetchMetrics(
                 $req->getHostname(),
                 $req->getServicename(),
                 $req->getCheckcommand(),
