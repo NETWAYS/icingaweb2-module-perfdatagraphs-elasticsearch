@@ -130,7 +130,7 @@ class Elasticsearch
         try {
             $d = Json::decode($responseBody, true);
         } catch (JsonDecodeException $e) {
-            // TODO: Logger::error
+            Logger::error('Failed to decode Elasticsaerch response: %s', $e);
             return [];
         }
 
@@ -214,21 +214,24 @@ class Elasticsearch
 
         $params['index'] = 'metrics-icinga2.' . $this->normalizeCheckcommand($checkCommand) . '-default';
 
-        $response = $this->search($params);
-
-        if (array_key_exists('error', $response)) {
-            $pfr->addError($response['error']);
-            return $pfr;
-        }
-
         do {
             if ($searchAfter !== null) {
                 // Set the search_after to get the next page of docs
                 $params['body']['search_after'] = [$searchAfter];
             }
 
-            // TODO: Should check if the response has these keys
-            $hits = $response['hits']['hits'] ?? [];
+            $response = $this->search($params);
+
+            if (array_key_exists('error', $response)) {
+                $pfr->addError($response['error']);
+                return $pfr;
+            }
+
+            $hits = [];
+
+            if (array_key_exists('hits', $response)) {
+                $hits = $response['hits']['hits'] ?? [];
+            }
 
             foreach ($hits as $doc) {
                 $perfdata = $doc['_source']['perfdata'] ?? [];
