@@ -137,10 +137,22 @@ class Elasticsearch
         return $d;
     }
 
-    protected function normalizeCheckcommand(string $name)
+    /**
+     * normalizeCheckcommand mimic the ElasticsearchDatastreamWriter's normalization.
+     * Any leading whitespace and leading special characters are trimmed;
+     * All remaining special (non-alphanumeric) characters are replaced with an underscore;
+     * Consecutive underscores are collapsed;
+     * Leading/trailing underscores are removed;
+     */
+    protected function normalizeCheckcommand(string $n)
     {
-        // TODO: Needs the same normalization is the Writer uses
-        return $name;
+        $n = preg_replace('/^[\s\W_]+/u', '', $n);
+        $n = preg_replace('/[^A-Za-z0-9]+/u', '_', $n);
+        $n = preg_replace('/_+/', '_', $n);
+        $n = trim($n, '_');
+        $n = mb_strtolower($n, 'UTF-8');
+
+        return $n;
     }
 
     /**
