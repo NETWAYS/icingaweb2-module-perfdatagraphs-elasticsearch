@@ -23,10 +23,10 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
     public function createElements(array $formData)
     {
         $this->addElement('text', 'elasticsearch_api_url', [
-            'label' => t('API URL'),
-            'description' => t('Comma-separated URLs for Elasticsearch including the scheme'),
+            'label' => t('API URLs'),
+            'description' => t('Comma-separated URLs for Elasticsearch including the scheme. Example: https://node2:9200,https://node2:9200'),
             'required' => true,
-            'placeholder' => 'http://node2:9200,http://node2:9200',
+            'placeholder' => 'https://node2:9200,https://node2:9200',
         ]);
 
         $this->addElement('text', 'elasticsearch_api_username', [
