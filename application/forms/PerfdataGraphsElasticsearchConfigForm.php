@@ -29,12 +29,6 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
             'placeholder' => 'http://node2:9200,http://node2:9200',
         ]);
 
-        // $this->addElement('text', 'elasticsearch_api_index', [
-        //     'label' => t('Name of the index to query'),
-        //     'description' => t('Name of the index configured in Icinga'),
-        //     'required' => true,
-        // ]);
-
         $this->addElement('text', 'elasticsearch_api_username', [
             'label' => t('API basic auth username'),
             'description' => t('The user for HTTP basic auth. Not used if empty')
@@ -140,13 +134,16 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
     {
         $baseURI = $form->getValue('elasticsearch_api_url', 'http://localhost:9200');
         $timeout = (int) $form->getValue('elasticsearch_api_timeout', 10);
-        $index = $form->getValue('elasticsearch_api_index', 'icinga2');
         $username = $form->getValue('elasticsearch_api_username', '');
         $password = $form->getValue('elasticsearch_api_password', '');
         $tlsVerify = (bool) $form->getValue('elasticsearch_api_tls_insecure', false);
 
+        // TODO: Not yet implemented
+        $maxDataPoints = 10000;
+        // $maxDataPoints = $form->getValue('elasticsearch_max_data_points', 10000);
+
         try {
-            $c = new Elasticsearch($baseURI, $index, $username, $password, $timeout, $tlsVerify);
+            $c = new Elasticsearch($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify);
         } catch (Exception $e) {
             return ['output' => 'General error: ' . $e->getMessage(), 'error' => true];
         }

@@ -16,6 +16,8 @@ use Icinga\Util\Json;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Query;
+use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Exception\ConnectException;
 
 use DateInterval;
 use DateTime;
@@ -285,7 +287,25 @@ class Elasticsearch
      */
     public function status(): array
     {
-        return ['output' => 'not yet implemented', 'error' => false];
+        $req = new Request('GET', '/', [], null);
+
+        try {
+            $response = $this->transport->sendRequest($req);
+            return ['output' =>  $response->getBody()->getContents()];
+        } catch (ConnectException $e) {
+            return ['output' => 'Connection error: ' . $e->getMessage(), 'error' => true];
+        } catch (RequestException $e) {
+            if ($e->hasResponse()) {
+                return ['output' => 'HTTP error: ' . $e->getResponse()->getStatusCode() . ' - ' .
+                                      $e->getResponse()->getReasonPhrase(), 'error' => true];
+            } else {
+                return ['output' => 'Request error: ' . $e->getMessage(), 'error' => true];
+            }
+        } catch (Exception $e) {
+            return ['output' => 'General error: ' . $e->getMessage(), 'error' => true];
+        }
+
+        return ['output' => 'Unknown error', 'error' => true];
     }
 
 
