@@ -163,12 +163,10 @@ class Elasticsearch
         array $excludeMetrics,
     ): PerfdataResponse {
         $params = [
+            'size' => 2000,
+            'sort' => '@timestamp:asc',
             'body' => [
                 // Still might cause an out-out-memory, but a lower value means more HTTP requests to the API
-                'size' => 2000,
-                'sort' => [
-                    ['@timestamp' => [ 'order' => 'asc' ]]
-                ],
                 'query' => [
                     'bool' => [
                         'must' => [
@@ -185,9 +183,11 @@ class Elasticsearch
         // If it's a hostalive check we dont need the service term
         if ($isHostCheck) {
             $params['body']['query']['bool']['must'] = [
-                            [ 'term' => [ 'host.name' => $hostName ] ],
+                [ 'term' => [ 'host.name' => $hostName ] ],
             ];
         }
+
+        $pfr = new PerfdataResponse();
 
         $searchAfter = null;
 
@@ -198,19 +198,26 @@ class Elasticsearch
         $criticals = [];
         $units = [];
 
-        $indexName = '/metrics-icinga2.' . $this->normalizeCheckcommand($checkCommand) . '-default/_search';
+        $params['index'] = 'metrics-icinga2.' . $this->normalizeCheckcommand($checkCommand) . '-default';
+
+        $response = $this->search($params);
+
+        if (array_key_exists('error', $response)) {
+            $pfr->addError($response['error']);
+            return $pfr;
+        }
 
         do {
             if ($searchAfter !== null) {
+                // Set the search_after to get the next page of docs
                 $params['body']['search_after'] = [$searchAfter];
             }
 
-            $response = $this->search($params);
-
+            // TODO: Should check if the response has these keys
             $hits = $response['hits']['hits'] ?? [];
 
-            foreach ($hits as $d) {
-                $perfdata = $d['_source']['perfdata'] ?? [];
+            foreach ($hits as $doc) {
+                $perfdata = $doc['_source']['perfdata'] ?? [];
 
                 foreach ($perfdata as $label => $metric) {
                     if (!$this->isIncluded($label, $includeMetrics)) {
@@ -226,7 +233,7 @@ class Elasticsearch
                     }
 
                     $values[$label][] = $metric['value'] ?? null;
-                    $date = new DateTime($d['_source']['@timestamp']);
+                    $date = new DateTime($doc['_source']['@timestamp']);
                     $timestamps[$label][] = $date->getTimestamp();
                     $warnings[$label][] = $metric['warn'] ?? null;
                     $criticals[$label][] = $metric['crit'] ?? null;
@@ -237,12 +244,9 @@ class Elasticsearch
             $hitCount = count($hits);
             $searchAfter = end($hits)['sort'][0] ?? null;
 
-            // unset to save some memory
             unset($response);
             unset($hits);
         } while ($hitCount > 0);
-
-        $pfr = new PerfdataResponse();
 
         // Add it to the PerfdataResponse
         // TODO: we can optize that by doing it in the while loop
