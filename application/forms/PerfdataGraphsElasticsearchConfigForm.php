@@ -2,11 +2,10 @@
 
 namespace Icinga\Module\Perfdatagraphselasticsearch\Forms;
 
-use Icinga\Module\Perfdatagraphselasticsearch\Client\Elasticsearch;
+use Icinga\Module\Perfdatagraphselasticsearch\Client\ElasticsearchClient;
+use Icinga\Module\Perfdatagraphselasticsearch\Client\ElasticsearchDatastreamClient;
 
 use Icinga\Forms\ConfigForm;
-
-use Exception;
 
 /**
  * PerfdataGraphsElasticsearchConfigForm represents the configuration form for the PerfdataGraphs Elasticsearch Module.
@@ -22,6 +21,31 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
 
     public function createElements(array $formData)
     {
+        $this->addElement('select', 'elasticsearch_icinga_writer', [
+            'description' => t('Which Icinga2 Elasticsearch Writer is used to write data'),
+            'label' => t('Icinga2 Writer'),
+            'multiOptions' => array_merge(
+                ['' => sprintf(' - %s - ', t('Please choose'))],
+                [
+                    'ElasticsearchWriter' => 'ElasticsearchWriter',
+                    'ElasticsearchDatastreamWriter' => 'ElasticsearchDatastreamWriter',
+                ]
+            ),
+            'disable' => [''],
+            'required' => true,
+            'class' => 'autosubmit',
+            'value' => ''
+        ]);
+
+        if (isset($formData['elasticsearch_icinga_writer']) && $formData['elasticsearch_icinga_writer'] === 'ElasticsearchWriter') {
+            $this->addElement('text', 'elasticsearch_api_index', [
+                'label' => t('Icinga2 Index'),
+                'description' => t('Name of the index that is configured in Icinga2'),
+                'required' => true,
+                'placeholder' => 'icinga2',
+            ]);
+        }
+
         $this->addElement('text', 'elasticsearch_api_url', [
             'label' => t('API URLs'),
             'description' => t('Comma-separated URLs for Elasticsearch including the scheme. Example: https://node2:9200,https://node2:9200'),
@@ -136,16 +160,19 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
         $timeout = (int) $form->getValue('elasticsearch_api_timeout', 10);
         $username = $form->getValue('elasticsearch_api_username', '');
         $password = $form->getValue('elasticsearch_api_password', '');
+        $index = $form->getValue('elasticsearch_api_index', 'icinga2');
         $tlsVerify = (bool) $form->getValue('elasticsearch_api_tls_insecure', false);
 
         // TODO: Not yet implemented
         $maxDataPoints = 10000;
         // $maxDataPoints = $form->getValue('elasticsearch_max_data_points', 10000);
 
-        try {
-            $c = new Elasticsearch($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify);
-        } catch (Exception $e) {
-            return ['output' => 'General error: ' . $e->getMessage(), 'error' => true];
+        $writer = $form->getValue('elasticsearch_icinga_writer', '');
+
+        if ($writer === 'ElasticsearchWriter') {
+            $c = new ElasticsearchClient($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify, $index);
+        } else {
+            $c = new ElasticsearchDatastreamClient($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify);
         }
 
         $status = $c->status();
