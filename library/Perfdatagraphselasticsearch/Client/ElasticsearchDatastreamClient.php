@@ -11,28 +11,16 @@ use Icinga\Module\Perfdatagraphs\Model\PerfdataSeries;
 
 use Icinga\Application\Config;
 use Icinga\Application\Logger;
-use Icinga\Util\Json;
 
 use GuzzleHttp\Client;
-use GuzzleHttp\Psr7\Request;
-use GuzzleHttp\Psr7\Query;
-use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Exception\ConnectException;
-
-use DateInterval;
-use DateTime;
 use Exception;
+use DateTime;
 
 /**
- * Elasticsearch handles calling the API and returning the data.
+ * ElasticsearchDatastreamClient is used with with Icinga2 ElasticsearchDatastreamWriter
  */
-class Elasticsearch
+class ElasticsearchDatastreamClient extends BaseClient implements ESInterface
 {
-    protected $transport = null;
-
-    // TODO: Currently unsed
-    protected int $maxDataPoints;
-
     public function __construct(
         string $urls,
         string $username,
@@ -57,84 +45,46 @@ class Elasticsearch
         }
 
         $this->transport = $transport;
-
         $this->maxDataPoints = $maxDataPoints;
     }
 
-    protected function isIncluded($metricname, array $includeMetrics = []): bool
+    /**
+     * fromConfig returns a new Client from this module's configuration
+     *
+     * @param Config $moduleConfig configuration to load (used for testing)
+     * @return $this
+     */
+    public static function fromConfig(Config $moduleConfig = null): ESInterface
     {
-        // All are included if not set
-        if (count($includeMetrics) === 0) {
-            return true;
-        }
-        foreach ($includeMetrics as $pattern) {
-            if (fnmatch($pattern, $metricname)) {
-                return true;
+        $default = [
+            'api_url' => 'http://localhost:9200',
+            'api_timeout' => 10,
+            'api_max_data_points' => 10000,
+            'api_username' => '',
+            'api_password' => '',
+            'api_tls_insecure' => false,
+        ];
+
+        // Try to load the configuration
+        if ($moduleConfig === null) {
+            try {
+                Logger::debug('Loaded Perfdata Graphs Elasticsearch module configuration to get Config');
+                $moduleConfig = Config::module('perfdatagraphselasticsearch');
+            } catch (Exception $e) {
+                Logger::error('Failed to load Perfdata Graphs Elasticsearch module configuration: %s', $e);
+                return $default;
             }
         }
-        return false;
-    }
 
-    protected function isExcluded($metricname, array $excludeMetrics = []): bool
-    {
-        // None are exlucded if not set
-        if (count($excludeMetrics) === 0) {
-            return false;
-        }
+        $baseURI = rtrim($moduleConfig->get('elasticsearch', 'api_url', $default['api_url']), '/');
+        $timeout = (int) $moduleConfig->get('elasticsearch', 'api_timeout', $default['api_timeout']);
+        $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
+        $username = $moduleConfig->get('elasticsearch', 'api_username', $default['api_username']);
+        $password = $moduleConfig->get('elasticsearch', 'api_password', $default['api_password']);
+        // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
+        $tlsVerify = !(bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
 
-        foreach ($excludeMetrics as $pattern) {
-            if (fnmatch($pattern, $metricname)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    protected function createQuery(array $params): string
-    {
-        return Query::build($params);
-    }
-
-    protected function extractArgument(array &$params, string $arg): mixed
-    {
-        if (array_key_exists($arg, $params) === true) {
-            $value = $params[$arg];
-            $value = (is_object($value) && !is_iterable($value)) ?
-                (array) $value :
-                $value;
-            unset($params[$arg]);
-            return $value;
-        } else {
-            return null;
-        }
-    }
-
-    public function search(array $params = [])
-    {
-        $index = $this->extractArgument($params, 'index');
-        $body = $this->extractArgument($params, 'body');
-
-        $query = $this->createQuery($params);
-
-        $uri = isset($index) ? "/$index/_search" : '_search';
-        $uri = $uri . '?' . $query;
-        $method = isset($body) ? 'POST' : 'GET';
-
-        $body = isset($body) ? Json::encode($body) : null;
-
-        $req = new Request($method, $uri, [], $body);
-
-        $response = $this->transport->sendRequest($req);
-        $responseBody = $response->getBody()->getContents();
-
-        try {
-            $d = Json::decode($responseBody, true);
-        } catch (JsonDecodeException $e) {
-            Logger::error('Failed to decode Elasticsaerch response: %s', $e);
-            return [];
-        }
-
-        return $d;
+        return new static($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify);
     }
 
     /**
@@ -295,92 +245,5 @@ class Elasticsearch
         }
 
         return $pfr;
-    }
-
-    /**
-     * @return array
-     */
-    public function status(): array
-    {
-        $req = new Request('GET', '/', [], null);
-
-        try {
-            $response = $this->transport->sendRequest($req);
-            return ['output' =>  $response->getBody()->getContents()];
-        } catch (ConnectException $e) {
-            return ['output' => 'Connection error: ' . $e->getMessage(), 'error' => true];
-        } catch (RequestException $e) {
-            if ($e->hasResponse()) {
-                return ['output' => 'HTTP error: ' . $e->getResponse()->getStatusCode() . ' - ' .
-                                      $e->getResponse()->getReasonPhrase(), 'error' => true];
-            } else {
-                return ['output' => 'Request error: ' . $e->getMessage(), 'error' => true];
-            }
-        } catch (Exception $e) {
-            return ['output' => 'General error: ' . $e->getMessage(), 'error' => true];
-        }
-
-        return ['output' => 'Unknown error', 'error' => true];
-    }
-
-
-    /**
-     * parseDuration parses the duration string from the frontend
-     * into something we can use with the API (from parameter).
-     *
-     * @param string $duration ISO8601 Duration
-     * @param string $now current time (used in testing)
-     * @return string
-     */
-    public static function parseDuration(\DateTime $now, string $duration): string
-    {
-        try {
-            $int = new DateInterval($duration);
-        } catch (Exception $e) {
-            Logger::error('Failed to parse date interval: %s', $e);
-            $int = new DateInterval('PT12H');
-        }
-
-        $now->sub($int);
-        return $now->format('Y-m-d\TH:i:s');
-    }
-
-    /**
-     * fromConfig returns a new Elasticsearch Client from this module's configuration
-     *
-     * @param Config $moduleConfig configuration to load (used for testing)
-     * @return $this
-     */
-    public static function fromConfig(Config $moduleConfig = null): Elasticsearch
-    {
-        $default = [
-            'api_url' => 'http://localhost:9200',
-            'api_timeout' => 10,
-            'api_max_data_points' => 10000,
-            'api_username' => '',
-            'api_password' => '',
-            'api_tls_insecure' => false,
-        ];
-
-        // Try to load the configuration
-        if ($moduleConfig === null) {
-            try {
-                Logger::debug('Loaded Perfdata Graphs Elasticsearch module configuration to get Config');
-                $moduleConfig = Config::module('perfdatagraphselasticsearch');
-            } catch (Exception $e) {
-                Logger::error('Failed to load Perfdata Graphs Elasticsearch module configuration: %s', $e);
-                return $default;
-            }
-        }
-
-        $baseURI = rtrim($moduleConfig->get('elasticsearch', 'api_url', $default['api_url']), '/');
-        $timeout = (int) $moduleConfig->get('elasticsearch', 'api_timeout', $default['api_timeout']);
-        $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
-        $username = $moduleConfig->get('elasticsearch', 'api_username', $default['api_username']);
-        $password = $moduleConfig->get('elasticsearch', 'api_password', $default['api_password']);
-        // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
-        $tlsVerify = !(bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
-
-        return new static($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify);
     }
 }

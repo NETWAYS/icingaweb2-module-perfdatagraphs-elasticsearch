@@ -2,20 +2,44 @@
 
 namespace Icinga\Module\Perfdatagraphselasticsearch\ProvidedHook\PerfdataGraphs;
 
-use Icinga\Module\Perfdatagraphselasticsearch\Client\Elasticsearch;
+use Icinga\Module\Perfdatagraphselasticsearch\Client\ESInterface;
+use Icinga\Module\Perfdatagraphselasticsearch\Client\ElasticsearchClient;
+use Icinga\Module\Perfdatagraphselasticsearch\Client\ElasticsearchDatastreamClient;
 
 use Icinga\Module\Perfdatagraphs\Hook\PerfdataSourceHook;
 use Icinga\Module\Perfdatagraphs\Model\PerfdataRequest;
 use Icinga\Module\Perfdatagraphs\Model\PerfdataResponse;
 
+use Icinga\Application\Config;
+
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Exception\ConnectException;
 
 use DateTime;
+use RuntimeException;
 use Exception;
 
 class PerfdataSource extends PerfdataSourceHook
 {
+    protected function getClient(): ESInterface
+    {
+        $moduleConfig = Config::module('perfdatagraphselasticsearch');
+
+        $writer = $moduleConfig->get('elasticsearch', 'icinga_writer', '');
+
+        if ($writer === 'ElasticsearchWriter') {
+            $client = ElasticsearchClient::fromConfig();
+            return $client;
+        }
+
+        if ($writer === 'ElasticsearchDatastreamWriter') {
+            $client = ElasticsearchDatastreamClient::fromConfig();
+            return $client;
+        }
+
+        throw new RuntimeException('No valid Icinga2 Writer configured');
+    }
+
     public function getName(): string
     {
         return 'Elasticsearch';
@@ -23,19 +47,18 @@ class PerfdataSource extends PerfdataSourceHook
 
     public function fetchData(PerfdataRequest $req): PerfdataResponse
     {
-        // Parse the duration
-        $now = new DateTime();
-        $from = Elasticsearch::parseDuration($now, $req->getDuration());
-
         $perfdataresponse = new PerfdataResponse();
 
-        // Create a client and get the data from the API
+        $client = null;
         try {
-            $client = Elasticsearch::fromConfig();
+            $client = $this->getClient();
         } catch (Exception $e) {
             $perfdataresponse->addError($e->getMessage());
             return $perfdataresponse;
         }
+
+        $now = new DateTime();
+        $from = $client->parseDuration($now, $req->getDuration());
 
         // Let's fetch the data from the Elasticsearch API
         try {
@@ -54,11 +77,6 @@ class PerfdataSource extends PerfdataSourceHook
             $perfdataresponse->addError($e->getMessage());
         } catch (Exception $e) {
             $perfdataresponse->addError($e->getMessage());
-        }
-
-        // Why even bother when we have errors here
-        if ($perfdataresponse->hasErrors()) {
-            return $perfdataresponse;
         }
 
         return $perfdataresponse;
