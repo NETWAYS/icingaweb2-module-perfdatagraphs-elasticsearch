@@ -11,6 +11,7 @@ use Icinga\Module\Perfdatagraphs\Model\PerfdataSeries;
 
 use Icinga\Application\Config;
 use Icinga\Application\Logger;
+use Icinga\Util\Json;
 
 use GuzzleHttp\Client;
 use Exception;
@@ -178,7 +179,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
             $response = $this->search($params);
 
             if (array_key_exists('error', $response)) {
-                $pfr->addError($response['error']);
+                $pfr->addError(Json::encode($response['error']));
                 return $pfr;
             }
 
