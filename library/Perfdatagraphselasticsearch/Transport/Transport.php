@@ -22,7 +22,7 @@ final class Transport implements ClientInterface
     private string $password;
 
     // Number of retries when sending HTTP requests
-    protected int $retries = 1;
+    protected int $retries = 3;
 
     // HTTP client to connect to hosts
     private ClientInterface $client;
