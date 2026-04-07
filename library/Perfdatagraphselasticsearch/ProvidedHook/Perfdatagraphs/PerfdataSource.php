@@ -4,7 +4,7 @@ namespace Icinga\Module\Perfdatagraphselasticsearch\ProvidedHook\PerfdataGraphs;
 
 use Icinga\Module\Perfdatagraphselasticsearch\Client\ESInterface;
 use Icinga\Module\Perfdatagraphselasticsearch\Client\ElasticsearchClient;
-use Icinga\Module\Perfdatagraphselasticsearch\Client\ElasticsearchDatastreamClient;
+use Icinga\Module\Perfdatagraphselasticsearch\Client\OTLPMetricsClient;
 
 use Icinga\Module\Perfdatagraphs\Hook\PerfdataSourceHook;
 use Icinga\Module\Perfdatagraphs\Model\PerfdataRequest;
@@ -32,8 +32,8 @@ class PerfdataSource extends PerfdataSourceHook
             return $client;
         }
 
-        if ($writer === 'ElasticsearchDatastreamWriter') {
-            $client = ElasticsearchDatastreamClient::fromConfig();
+        if ($writer === 'OTLPMetricsWriter') {
+            $client = OTLPMetricsClient::fromConfig();
             return $client;
         }
 
