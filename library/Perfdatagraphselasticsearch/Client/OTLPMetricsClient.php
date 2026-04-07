@@ -15,13 +15,14 @@ use Icinga\Util\Json;
 
 use GuzzleHttp\Client;
 use Exception;
-use DateTime;
 
 /**
- * ElasticsearchDatastreamClient is used with with Icinga2 ElasticsearchDatastreamWriter
+ * OTLPMetricsClient is used with with Icinga2 ElasticsearchWriter
  */
-class ElasticsearchDatastreamClient extends BaseClient implements ESInterface
+class OTLPMetricsClient extends BaseClient implements ESInterface
 {
+    protected string $index;
+
     public function __construct(
         string $urls,
         string $username,
@@ -29,6 +30,7 @@ class ElasticsearchDatastreamClient extends BaseClient implements ESInterface
         int $maxDataPoints,
         int $timeout,
         bool $tlsVerify,
+        string $index = 'icinga2'
     ) {
         $u = explode(',', $urls);
 
@@ -42,7 +44,7 @@ class ElasticsearchDatastreamClient extends BaseClient implements ESInterface
         $transport = new Transport($HTTPClient, $pool);
 
         if (isset($username)) {
-            $transport->setBasicAuth($username, $password = '');
+            $transport->setBasicAuth($username, $password);
         }
 
         $this->transport = $transport;
@@ -50,7 +52,7 @@ class ElasticsearchDatastreamClient extends BaseClient implements ESInterface
     }
 
     /**
-     * fromConfig returns a new Client from this module's configuration
+     * fromConfig returns a new Elasticsearch Client from this module's configuration
      *
      * @param Config $moduleConfig configuration to load (used for testing)
      * @return $this
@@ -59,6 +61,7 @@ class ElasticsearchDatastreamClient extends BaseClient implements ESInterface
     {
         $default = [
             'api_url' => 'http://localhost:9200',
+            'api_index' => 'icinga2',
             'api_timeout' => 10,
             'api_max_data_points' => 10000,
             'api_username' => '',
@@ -78,6 +81,7 @@ class ElasticsearchDatastreamClient extends BaseClient implements ESInterface
         }
 
         $baseURI = rtrim($moduleConfig->get('elasticsearch', 'api_url', $default['api_url']), '/');
+        $index = rtrim($moduleConfig->get('elasticsearch', 'api_index', $default['api_index']), 'icinga2');
         $timeout = (int) $moduleConfig->get('elasticsearch', 'api_timeout', $default['api_timeout']);
         $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
         $username = $moduleConfig->get('elasticsearch', 'api_username', $default['api_username']);
@@ -85,25 +89,7 @@ class ElasticsearchDatastreamClient extends BaseClient implements ESInterface
         // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
         $tlsVerify = !(bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
 
-        return new static($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify);
-    }
-
-    /**
-     * normalizeCheckcommand mimic the ElasticsearchDatastreamWriter's normalization.
-     * Any leading whitespace and leading special characters are trimmed;
-     * All remaining special (non-alphanumeric) characters are replaced with an underscore;
-     * Consecutive underscores are collapsed;
-     * Leading/trailing underscores are removed;
-     */
-    protected function normalizeCheckcommand(string $n)
-    {
-        $n = preg_replace('/^[\s\W_]+/u', '', $n);
-        $n = preg_replace('/[^A-Za-z0-9]+/u', '_', $n);
-        $n = preg_replace('/_+/', '_', $n);
-        $n = trim($n, '_');
-        $n = mb_strtolower($n, 'UTF-8');
-
-        return $n;
+        return new static($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify, $index);
     }
 
     /**
@@ -131,11 +117,15 @@ class ElasticsearchDatastreamClient extends BaseClient implements ESInterface
             'size' => 2000,
             'sort' => '@timestamp:asc',
             'body' => [
-                // Still might cause an out-out-memory, but a lower value means more HTTP requests to the API
+                'fields' => [
+                    ['field' => '@timestamp', 'format' => 'epoch_second' ]
+                ],
                 'query' => [
                     'bool' => [
                         'must' => [
-                            [ 'match' => [ 'service.name' => $hostName .'!'. $serviceName ] ],
+                            [ 'match' => [ 'resource.attributes.icinga2.host.name' => $hostName ] ],
+                            [ 'match' => [ 'resource.attributes.icinga2.service.name' => $serviceName ] ],
+                            [ 'match' => [ 'resource.attributes.icinga2.command.name' => $checkCommand ] ]
                         ],
                         'filter' => [
                             'range' => [ '@timestamp' => [ 'gte' => $from, 'lte' => 'now', ] ]
@@ -148,26 +138,17 @@ class ElasticsearchDatastreamClient extends BaseClient implements ESInterface
         // If it's a hostalive check we dont need the service term
         if ($isHostCheck) {
             $params['body']['query']['bool']['must'] = [
-                [ 'term' => [ 'host.name' => $hostName ] ],
+                [ 'term' => [ 'resource.attributes.icinga2.host.name' => $hostName ] ],
+                [ 'term' => [ 'resource.attributes.icinga2.command.name' => $checkCommand ] ]
             ];
         }
 
-        $pfr = new PerfdataResponse();
-
         $searchAfter = null;
 
-        // Where we store the data for each page of hits.
-        $timestamps = [];
-        $values = [];
-        $warnings = [];
-        $criticals = [];
-        $units = [];
-
-        $params['index'] = 'metrics-icinga2.' . $this->normalizeCheckcommand($checkCommand) . '-default';
+        $pfr = new PerfdataResponse();
 
         do {
             if ($searchAfter !== null) {
-                // Set the search_after to get the next page of docs
                 $params['body']['search_after'] = [$searchAfter];
             }
 
@@ -184,28 +165,89 @@ class ElasticsearchDatastreamClient extends BaseClient implements ESInterface
                 $hits = $response['hits']['hits'] ?? [];
             }
 
-            foreach ($hits as $doc) {
-                $perfdata = $doc['_source']['perfdata'] ?? [];
+            foreach ($hits as $d) {
+                $doc = $d['_source'];
+                $label = $doc['attributes']['perfdata_label'];
 
-                foreach ($perfdata as $label => $metric) {
-                    if (!$this->isIncluded($label, $includeMetrics)) {
-                        continue;
+                if (!$this->isIncluded($label, $includeMetrics)) {
+                    continue;
+                }
+
+                if ($this->isExcluded($label, $excludeMetrics)) {
+                    continue;
+                }
+
+                // Note, each document could be a warn/crit threhold or a value.
+
+                // First, make sure we have a dataset for the given metric label.
+                // Do we have a dataset already?
+                $dataset = $pfr->getDataset($label);
+                // No, then create a new one
+                if (empty($dataset)) {
+                    $dataset = new PerfdataSet($label, '');
+                    $pfr->addDataset($dataset);
+                }
+
+                // -- Example threshold:
+                // "attributes" : {
+                //   "perfdata_label" : "swap",
+                //   "threshold_type" : "critical"
+                // },
+                // "metrics" : {
+                //   "state_check.threshold" : 2.1472215E9
+                // }
+
+                // -- Example value:
+                // "attributes" : {
+                //   "perfdata_label" : "swap",
+                //   "unit" : "bytes"
+                // },
+                // "metrics" : {
+                //   "state_check.perfdata" : 8.588886016E9
+                // }
+
+                // The current series in the dataset
+                $series = $dataset->getSeries();
+
+                // Do we have a value series already?
+                if (array_key_exists('value', $series)) {
+                    $values = $series['value'];
+                } else {
+                    $values = new PerfdataSeries('value');
+                    $dataset->addSeries($values);
+                }
+
+                // Do we have a value series already?
+                if (array_key_exists('warning', $series)) {
+                    $warns = $series['warning'];
+                } else {
+                    $warns = new PerfdataSeries('warning');
+                    $dataset->addSeries($warns);
+                }
+
+                // Do we have a value series already?
+                if (array_key_exists('critical', $series)) {
+                    $crits = $series['critical'];
+                } else {
+                    $crits = new PerfdataSeries('critical');
+                    $dataset->addSeries($crits);
+                }
+
+                // Is this a threshold document then add the warns/crits
+                if (array_key_exists('state_check.threshold', $doc['metrics'])) {
+                    if ($doc['attributes']['threshold_type'] === 'warning') {
+                        $warns->addValue($doc['metrics']['state_check.threshold'] ?? null);
                     }
-
-                    if ($this->isExcluded($label, $excludeMetrics)) {
-                        continue;
+                    if ($doc['attributes']['threshold_type'] === 'critical') {
+                        $crits->addValue($doc['metrics']['state_check.threshold'] ?? null);
                     }
+                }
 
-                    if (!isset($values[$label])) {
-                        $values[$label] = [];
-                    }
-
-                    $values[$label][] = $metric['value'] ?? null;
-                    $date = new DateTime($doc['_source']['@timestamp']);
-                    $timestamps[$label][] = $date->getTimestamp();
-                    $warnings[$label][] = $metric['warn'] ?? null;
-                    $criticals[$label][] = $metric['crit'] ?? null;
-                    $units[$label][] = $metric['unit'] ?? '';
+                // Is this a threshold document then add the values and timestamps
+                if (array_key_exists('state_check.perfdata', $doc['metrics'])) {
+                    $values->addValue($doc['metrics']['state_check.perfdata'] ?? null);
+                    $ts = (int) end($d['fields']['@timestamp']);
+                    $dataset->addTimestamp($ts);
                 }
             }
 
@@ -215,35 +257,6 @@ class ElasticsearchDatastreamClient extends BaseClient implements ESInterface
             unset($response);
             unset($hits);
         } while ($hitCount > 0);
-
-        // Add it to the PerfdataResponse
-        // TODO: we can optize that by doing it in the while loop
-        foreach (array_keys($values) as $label) {
-            $u = '';
-            if (array_key_exists($label, $units)) {
-                $u = end($units[$label]);
-            }
-
-            $s = new PerfdataSet($label, $u);
-            $s->setTimestamps($timestamps[$label]);
-
-            if (array_key_exists($label, $values)) {
-                $vSeries = new PerfdataSeries('value', $values[$label]);
-                $s->addSeries($vSeries);
-            }
-
-            if (array_key_exists($label, $warnings) && !empty($warnings)) {
-                $wSeries = new PerfdataSeries('warning', $warnings[$label]);
-                $s->addSeries($wSeries);
-            }
-
-            if (array_key_exists($label, $criticals) && !empty($criticals)) {
-                $cSeries = new PerfdataSeries('critical', $criticals[$label]);
-                $s->addSeries($cSeries);
-            }
-
-            $pfr->addDataset($s);
-        }
 
         return $pfr;
     }

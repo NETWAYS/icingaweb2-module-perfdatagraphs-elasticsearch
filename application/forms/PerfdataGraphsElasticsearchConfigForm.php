@@ -3,7 +3,7 @@
 namespace Icinga\Module\Perfdatagraphselasticsearch\Forms;
 
 use Icinga\Module\Perfdatagraphselasticsearch\Client\ElasticsearchClient;
-use Icinga\Module\Perfdatagraphselasticsearch\Client\ElasticsearchDatastreamClient;
+use Icinga\Module\Perfdatagraphselasticsearch\Client\OTLPMetricsClient;
 
 use Icinga\Forms\ConfigForm;
 
@@ -28,7 +28,7 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
                 ['' => sprintf(' - %s - ', t('Please choose'))],
                 [
                     'ElasticsearchWriter' => 'ElasticsearchWriter',
-                    'ElasticsearchDatastreamWriter' => 'ElasticsearchDatastreamWriter',
+                    'OTLPMetricsWriter' => 'OTLPMetricsWriter',
                 ]
             ),
             'disable' => [''],
@@ -37,14 +37,12 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
             'value' => ''
         ]);
 
-        if (isset($formData['elasticsearch_icinga_writer']) && $formData['elasticsearch_icinga_writer'] === 'ElasticsearchWriter') {
-            $this->addElement('text', 'elasticsearch_api_index', [
-                'label' => t('Icinga2 Index'),
-                'description' => t('Name of the index that is configured in Icinga2'),
-                'required' => true,
-                'placeholder' => 'icinga2',
-            ]);
-        }
+        $this->addElement('text', 'elasticsearch_api_index', [
+            'label' => t('Icinga2 Index'),
+            'description' => t('Name of the index that is configured in Icinga2'),
+            'required' => true,
+            'placeholder' => 'icinga2',
+        ]);
 
         $this->addElement('text', 'elasticsearch_api_url', [
             'label' => t('API URLs'),
@@ -172,7 +170,7 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
         if ($writer === 'ElasticsearchWriter') {
             $c = new ElasticsearchClient($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify, $index);
         } else {
-            $c = new ElasticsearchDatastreamClient($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify);
+            $c = new OTLPMetricsClient($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify);
         }
 
         $status = $c->status();

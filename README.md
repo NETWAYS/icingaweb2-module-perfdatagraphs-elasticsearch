@@ -11,6 +11,6 @@ This module requires the frontend module:
 ## Installation Requirements
 
 * PHP version ≥ 8.0
-* Icinga2 ElasticsearchWriter or ElasticsearchDatastreamWriter
+* Icinga2 ElasticsearchWriter or OTLPMetricsWriter
 * IcingaDB or IDO Database
 * Elasticsearch

@@ -4,12 +4,13 @@ namespace Icinga\Module\Perfdatagraphselasticsearch\ProvidedHook\PerfdataGraphs;
 
 use Icinga\Module\Perfdatagraphselasticsearch\Client\ESInterface;
 use Icinga\Module\Perfdatagraphselasticsearch\Client\ElasticsearchClient;
-use Icinga\Module\Perfdatagraphselasticsearch\Client\ElasticsearchDatastreamClient;
+use Icinga\Module\Perfdatagraphselasticsearch\Client\OTLPMetricsClient;
 
 use Icinga\Module\Perfdatagraphs\Hook\PerfdataSourceHook;
 use Icinga\Module\Perfdatagraphs\Model\PerfdataRequest;
 use Icinga\Module\Perfdatagraphs\Model\PerfdataResponse;
 
+use Icinga\Application\Benchmark;
 use Icinga\Application\Config;
 
 use GuzzleHttp\Exception\RequestException;
@@ -32,8 +33,8 @@ class PerfdataSource extends PerfdataSourceHook
             return $client;
         }
 
-        if ($writer === 'ElasticsearchDatastreamWriter') {
-            $client = ElasticsearchDatastreamClient::fromConfig();
+        if ($writer === 'OTLPMetricsWriter') {
+            $client = OTLPMetricsClient::fromConfig();
             return $client;
         }
 
@@ -60,6 +61,8 @@ class PerfdataSource extends PerfdataSourceHook
         $now = new DateTime();
         $from = $client->parseDuration($now, $req->getDuration());
 
+        Benchmark::measure('Fetching performance data from Elasticsearch');
+
         // Let's fetch the data from the Elasticsearch API
         try {
             $perfdataresponse = $client->fetchMetrics(
@@ -78,6 +81,8 @@ class PerfdataSource extends PerfdataSourceHook
         } catch (Exception $e) {
             $perfdataresponse->addError($e->getMessage());
         }
+
+        Benchmark::measure('Fetched performance data from Elasticsearch');
 
         return $perfdataresponse;
     }

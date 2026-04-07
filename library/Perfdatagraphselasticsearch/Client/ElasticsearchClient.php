@@ -106,7 +106,6 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         return $keys;
     }
 
-
     /**
      * request calls the Opensearch HTTP API, decodes and returns the data.
      *
