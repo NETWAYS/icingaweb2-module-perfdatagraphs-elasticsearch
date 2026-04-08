@@ -10,6 +10,7 @@ use Icinga\Module\Perfdatagraphs\Hook\PerfdataSourceHook;
 use Icinga\Module\Perfdatagraphs\Model\PerfdataRequest;
 use Icinga\Module\Perfdatagraphs\Model\PerfdataResponse;
 
+use Icinga\Application\Benchmark;
 use Icinga\Application\Config;
 
 use GuzzleHttp\Exception\RequestException;
@@ -60,6 +61,8 @@ class PerfdataSource extends PerfdataSourceHook
         $now = new DateTime();
         $from = $client->parseDuration($now, $req->getDuration());
 
+        Benchmark::measure('Fetching performance data from Elasticsearch');
+
         // Let's fetch the data from the Elasticsearch API
         try {
             $perfdataresponse = $client->fetchMetrics(
@@ -78,6 +81,8 @@ class PerfdataSource extends PerfdataSourceHook
         } catch (Exception $e) {
             $perfdataresponse->addError($e->getMessage());
         }
+
+        Benchmark::measure('Fetched performance data from Elasticsearch');
 
         return $perfdataresponse;
     }

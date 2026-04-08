@@ -117,6 +117,9 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             'size' => 2000,
             'sort' => '@timestamp:asc',
             'body' => [
+                'fields' => [
+                    ['field' => '@timestamp', 'format' => 'epoch_second' ]
+                ],
                 'query' => [
                     'bool' => [
                         'must' => [
@@ -193,19 +196,25 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                     $criticals[$label] = [];
                 }
 
-                $timestamps[$label][] = (int) $doc['@timestamp'] / 1000;
+                $timestamps[$label][] = (int) end($d['fields']['@timestamp']);
 
+                // TODO this wont work cause we get a doc for each warn/crit
                 if (array_key_exists('threshold_type', $doc['attributes'])) {
-                    if ($doc['attributes']['threshold_type'] == 'warning') {
+                    if ($doc['attributes']['threshold_type'] === 'warning') {
                         $warnings[$label][] = $doc['metrics']['state_check.threshold'];
                     }
-                    if ($doc['attributes']['threshold_type'] == 'critical') {
+                    if ($doc['attributes']['threshold_type'] === 'critical') {
                         $criticals[$label][] = $doc['metrics']['state_check.threshold'];
                     }
+                } else {
+                    $warnings[$label][] = null;
+                    $criticals[$label][] = null;
                 }
 
                 if (array_key_exists('state_check.perfdata', $doc['metrics'])) {
                     $values[$label][] = $doc['metrics']['state_check.perfdata'];
+                } else {
+                    $values[$label][] = null;
                 }
             }
 
@@ -232,12 +241,12 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                 $s->addSeries($v);
             }
 
-            if (array_key_exists($metric, $warnings) && !empty($warnings)) {
+            if (array_key_exists($metric, $warnings) && !empty($warnings[$metric])) {
                 $w = new PerfdataSeries('warning', $warnings[$metric]);
                 $s->addSeries($w);
             }
 
-            if (array_key_exists($metric, $criticals) && !empty($criticals)) {
+            if (array_key_exists($metric, $criticals) && !empty($criticals[$metric])) {
                 $c = new PerfdataSeries('critical', $criticals[$metric]);
                 $s->addSeries($c);
             }
