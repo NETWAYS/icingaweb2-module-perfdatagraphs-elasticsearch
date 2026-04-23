@@ -44,7 +44,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $transport = new Transport($HTTPClient, $pool);
 
         if (isset($username)) {
-            $transport->setBasicAuth($username, $password = '');
+            $transport->setBasicAuth($username, $password);
         }
 
         $this->transport = $transport;
@@ -195,10 +195,8 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                 if (!isset($criticals[$label])) {
                     $criticals[$label] = [];
                 }
-
                 $timestamps[$label][] = (int) end($d['fields']['@timestamp']);
 
-                // TODO this wont work cause we get a doc for each warn/crit
                 if (array_key_exists('threshold_type', $doc['attributes'])) {
                     if ($doc['attributes']['threshold_type'] === 'warning') {
                         $warnings[$label][] = $doc['metrics']['state_check.threshold'];
@@ -232,23 +230,32 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             //     $u = end($units[$metric]);
             // }
 
+            $uniqueTimestamps[$metric] = array_unique($timestamps[$metric]);
             $s = new PerfdataSet($metric, $u);
-
-            $s->setTimestamps($timestamps[$metric]);
+            $s->setTimestamps($uniqueTimestamps[$metric]);
 
             if (array_key_exists($metric, $values)) {
-                $v = new PerfdataSeries('value', $values[$metric]);
-                $s->addSeries($v);
+                $values[$metric] = array_filter($values[$metric], fn($v) => $v !== null);
+                if (!empty($values[$metric])) {
+                    $v = new PerfdataSeries('value', $values[$metric]);
+                    $s->addSeries($v);
+                }
             }
 
             if (array_key_exists($metric, $warnings) && !empty($warnings[$metric])) {
-                $w = new PerfdataSeries('warning', $warnings[$metric]);
-                $s->addSeries($w);
+                $warnings[$metric] = array_filter($warnings[$metric], fn($v) => $v !== null);
+                if (!empty($warnings[$metric])) {
+                    $w = new PerfdataSeries('warning', $warnings[$metric]);
+                    $s->addSeries($w);
+                }
             }
 
             if (array_key_exists($metric, $criticals) && !empty($criticals[$metric])) {
-                $c = new PerfdataSeries('critical', $criticals[$metric]);
-                $s->addSeries($c);
+                $criticals[$metric] = array_filter($criticals[$metric], fn($v) => $v !== null);
+                if (!empty($criticals[$metric])) {
+                    $c = new PerfdataSeries('critical', $criticals[$metric]);
+                    $s->addSeries($c);
+                }
             }
 
             $pfr->addDataset($s);
