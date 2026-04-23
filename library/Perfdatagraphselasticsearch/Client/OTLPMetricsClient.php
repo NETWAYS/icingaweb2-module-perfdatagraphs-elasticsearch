@@ -230,11 +230,14 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             //     $u = end($units[$metric]);
             // }
 
+            // We do this because warning and critical thresholds are delivered by a seperate doc element.
+            // Otherwise the same timestamp occurs multiple times which affects the graph rendering
             $uniqueTimestamps[$metric] = array_unique($timestamps[$metric]);
             $s = new PerfdataSet($metric, $u);
             $s->setTimestamps($uniqueTimestamps[$metric]);
 
             if (array_key_exists($metric, $values)) {
+                // This filters out all null values of the array to make sure the graphs are displayed correctly
                 $values[$metric] = array_filter($values[$metric], fn($v) => $v !== null);
                 if (!empty($values[$metric])) {
                     $v = new PerfdataSeries('value', $values[$metric]);
@@ -243,6 +246,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             }
 
             if (array_key_exists($metric, $warnings) && !empty($warnings[$metric])) {
+                // This filters out all null values of the array to make sure the graphs are displayed correctly
                 $warnings[$metric] = array_filter($warnings[$metric], fn($v) => $v !== null);
                 if (!empty($warnings[$metric])) {
                     $w = new PerfdataSeries('warning', $warnings[$metric]);
@@ -251,6 +255,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             }
 
             if (array_key_exists($metric, $criticals) && !empty($criticals[$metric])) {
+                // This filters out all null values of the array to make sure the graphs are displayed correctly
                 $criticals[$metric] = array_filter($criticals[$metric], fn($v) => $v !== null);
                 if (!empty($criticals[$metric])) {
                     $c = new PerfdataSeries('critical', $criticals[$metric]);
