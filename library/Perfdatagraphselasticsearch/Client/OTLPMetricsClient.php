@@ -17,9 +17,9 @@ use GuzzleHttp\Client;
 use Exception;
 
 /**
- * ElasticsearchClient is used with with Icinga2 ElasticsearchWriter
+ * OTLPMetricsClient is used with with Icinga2 ElasticsearchWriter
  */
-class ElasticsearchClient extends BaseClient implements ESInterface
+class OTLPMetricsClient extends BaseClient implements ESInterface
 {
     protected string $index;
 
@@ -44,10 +44,11 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         $transport = new Transport($HTTPClient, $pool);
 
         if (isset($username)) {
-            $transport->setBasicAuth($username, $password = '');
+            $transport->setBasicAuth($username, $password);
         }
 
         $this->transport = $transport;
+        // TODO: Currently unused
         $this->maxDataPoints = $maxDataPoints;
     }
 
@@ -92,20 +93,6 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         return new static($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify, $index);
     }
 
-    protected function getDatasetKeys(array $fields): array
-    {
-        // There can be multiple datasets (pl, rta, etc) in a document,
-        // we need to get their keys to fetch the values
-        // "@timestamp": ["1751293383.713"],
-        // "check_result.perfdata./.unit.keyword": ["bytes"],
-        // "check_result.perfdata./.value": [14774000000],
-        // "check_result.perfdata./.warn": [80176000000],
-        // "check_result.perfdata./.unit": ["bytes"],
-        // "check_result.perfdata./.crit": [90198000000]
-        $keys = preg_grep('/check_result\.perfdata.*\.value/', array_keys($fields));
-        return $keys;
-    }
-
     /**
      * request calls the Opensearch HTTP API, decodes and returns the data.
      *
@@ -131,20 +118,18 @@ class ElasticsearchClient extends BaseClient implements ESInterface
             'size' => 2000,
             'sort' => '@timestamp:asc',
             'body' => [
-                '_source' => false,
                 'fields' => [
-                    'check_result.perfdata.*',
                     ['field' => '@timestamp', 'format' => 'epoch_second' ]
                 ],
                 'query' => [
                     'bool' => [
                         'must' => [
-                            [ 'term' => [ 'host.keyword' => $hostName ] ],
-                            [ 'term' => [ 'service.keyword' => $serviceName ] ],
-                            [ 'term' => [ 'check_command.keyword' => $checkCommand ] ]
+                            [ 'match' => [ 'resource.attributes.icinga2.host.name' => $hostName ] ],
+                            [ 'match' => [ 'resource.attributes.icinga2.service.name' => $serviceName ] ],
+                            [ 'match' => [ 'resource.attributes.icinga2.command.name' => $checkCommand ] ]
                         ],
                         'filter' => [
-                            'range' => [ 'timestamp' => [ 'gte' => $from, 'lte' => 'now', ] ]
+                            'range' => [ '@timestamp' => [ 'gte' => $from, 'lte' => 'now', ] ]
                         ],
                     ]
                 ]
@@ -154,8 +139,8 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         // If it's a hostalive check we dont need the service term
         if ($isHostCheck) {
             $params['body']['query']['bool']['must'] = [
-                [ 'term' => [ 'host.keyword' => $hostName ] ],
-                [ 'term' => [ 'check_command.keyword' => $checkCommand ] ]
+                [ 'term' => [ 'resource.attributes.icinga2.host.name' => $hostName ] ],
+                [ 'term' => [ 'resource.attributes.icinga2.command.name' => $checkCommand ] ]
             ];
         }
 
@@ -163,12 +148,8 @@ class ElasticsearchClient extends BaseClient implements ESInterface
 
         $pfr = new PerfdataResponse();
 
-        // Where we store the data for each page of hits.
-        $timestamps = [];
-        $values = [];
-        $warnings = [];
-        $criticals = [];
-        $units = [];
+        // Holds the current threshold value for crit/warn that we append only when we have a value
+        $currentThreshold = [];
 
         do {
             if ($searchAfter !== null) {
@@ -189,59 +170,91 @@ class ElasticsearchClient extends BaseClient implements ESInterface
             }
 
             foreach ($hits as $d) {
-                $doc = $d['fields'];
-                $keys = $this->getDatasetKeys($doc);
+                $doc = $d['_source'];
+                $label = $doc['attributes']['perfdata_label'];
 
-                foreach ($keys as $valueKey) {
-                    $metricname = preg_replace('/\.value$/', '', str_replace('check_result.perfdata.', '', $valueKey));
+                if (!$this->isIncluded($label, $includeMetrics)) {
+                    continue;
+                }
 
-                    if (!$this->isIncluded($metricname, $includeMetrics)) {
-                        continue;
+                if ($this->isExcluded($label, $excludeMetrics)) {
+                    continue;
+                }
+
+                // Note, each document could be a warn/crit threhold or a value.
+                // First, make sure we have a dataset for the given metric label.
+                // Do we have a dataset already?
+                $dataset = $pfr->getDataset($label);
+                // No, then create a new one
+                if (empty($dataset)) {
+                    $dataset = new PerfdataSet($label, '');
+                    $pfr->addDataset($dataset);
+                }
+
+                // -- Example threshold:
+                // "attributes" : {
+                //   "perfdata_label" : "swap",
+                //   "threshold_type" : "critical"
+                // },
+                // "metrics" : {
+                //   "state_check.threshold" : 2.1472215E9
+                // }
+
+                // -- Example value:
+                // "attributes" : {
+                //   "perfdata_label" : "swap",
+                //   "unit" : "bytes"
+                // },
+                // "metrics" : {
+                //   "state_check.perfdata" : 8.588886016E9
+                // }
+
+                // The current series in the dataset
+                $series = $dataset->getSeries();
+
+                // Do we have a value series already?
+                if (array_key_exists('value', $series)) {
+                    $values = $series['value'];
+                } else {
+                    $values = new PerfdataSeries('value');
+                    $dataset->addSeries($values);
+                }
+
+                // Do we have a value series already?
+                if (array_key_exists('warning', $series)) {
+                    $warns = $series['warning'];
+                } else {
+                    $warns = new PerfdataSeries('warning');
+                    $dataset->addSeries($warns);
+                }
+
+                // Do we have a value series already?
+                if (array_key_exists('critical', $series)) {
+                    $crits = $series['critical'];
+                } else {
+                    $crits = new PerfdataSeries('critical');
+                    $dataset->addSeries($crits);
+                }
+
+                // Is this a threshold document then add the warns/crits
+                if (array_key_exists('state_check.threshold', $doc['metrics'])) {
+                    if ($doc['attributes']['threshold_type'] === 'warning') {
+                        $currentThreshold[$label]['warning'] = $doc['metrics']['state_check.threshold'] ?? null;
                     }
-
-                    if ($this->isExcluded($metricname, $excludeMetrics)) {
-                        continue;
+                    if ($doc['attributes']['threshold_type'] === 'critical') {
+                        $currentThreshold[$label]['critical'] = $doc['metrics']['state_check.threshold'] ?? null;
                     }
+                }
 
-                    $unitKey = preg_replace('/\.value$/', '.unit', $valueKey);
-                    $warnKey = preg_replace('/\.value$/', '.warn', $valueKey);
-                    $critKey = preg_replace('/\.value$/', '.crit', $valueKey);
-
-                    if (!isset($values[$metricname])) {
-                        $values[$metricname] = [];
-                    }
-
-                    if (!isset($warnings[$metricname])) {
-                        $warnings[$metricname] = [];
-                    }
-
-                    if (!isset($criticals[$metricname])) {
-                        $criticals[$metricname] = [];
-                    }
-
-                    if (array_key_exists($unitKey, $doc)) {
-                        $units[$metricname][] = end($doc[$unitKey]);
-                    }
-
-                    $timestamps[$metricname][] = (int) end($doc['@timestamp']);
-
-                    if (array_key_exists($valueKey, $doc)) {
-                        $values[$metricname][] = end($doc[$valueKey]);
-                    } else {
-                        $values[$metricname][] = null;
-                    }
-
-                    if (array_key_exists($warnKey, $doc)) {
-                        $warnings[$metricname][] = end($doc[$warnKey]);
-                    } else {
-                        $warnings[$metricname][] = null;
-                    }
-
-                    if (array_key_exists($critKey, $doc)) {
-                        $criticals[$metricname][] = end($doc[$critKey]);
-                    } else {
-                        $criticals[$metricname][] = null;
-                    }
+                // Is this a threshold document then add the values and timestamps
+                if (array_key_exists('state_check.perfdata', $doc['metrics'])) {
+                    $values->addValue($doc['metrics']['state_check.perfdata'] ?? null);
+                    $crits->addValue($currentThreshold[$label]['critical'] ?? null);
+                    $warns->addValue($currentThreshold[$label]['warning'] ?? null);
+                    $ts = (int) end($d['fields']['@timestamp']);
+                    $dataset->addTimestamp($ts);
+                    // Reset the placeholder
+                    $currentThreshold[$label] = [];
                 }
             }
 
@@ -252,33 +265,15 @@ class ElasticsearchClient extends BaseClient implements ESInterface
             unset($hits);
         } while ($hitCount > 0);
 
-        // Add it to the PerfdataResponse
-        foreach (array_keys($values) as $metric) {
-            $u = '';
-            if (array_key_exists($metric, $units)) {
-                $u = end($units[$metric]);
+        // Remove the empty series from the datasets
+        $ds = $pfr->getDatasets();
+        foreach ($ds as $dataset) {
+            $series = $dataset->getSeries();
+            foreach ($series as $ser) {
+                if ($ser->isEmpty()) {
+                    $dataset->removeSeries($ser->getName());
+                }
             }
-
-            $s = new PerfdataSet($metric, $u);
-
-            $s->setTimestamps($timestamps[$metric]);
-
-            if (array_key_exists($metric, $values)) {
-                $v = new PerfdataSeries('value', $values[$metric]);
-                $s->addSeries($v);
-            }
-
-            if (array_key_exists($metric, $warnings) && !empty($warnings)) {
-                $w = new PerfdataSeries('warning', $warnings[$metric]);
-                $s->addSeries($w);
-            }
-
-            if (array_key_exists($metric, $criticals) && !empty($criticals)) {
-                $c = new PerfdataSeries('critical', $criticals[$metric]);
-                $s->addSeries($c);
-            }
-
-            $pfr->addDataset($s);
         }
 
         return $pfr;
