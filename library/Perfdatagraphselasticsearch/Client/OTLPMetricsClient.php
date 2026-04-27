@@ -239,22 +239,22 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                 // Is this a threshold document then add the warns/crits
                 if (array_key_exists('state_check.threshold', $doc['metrics'])) {
                     if ($doc['attributes']['threshold_type'] === 'warning') {
-                        $currentThreshold['warning'] = $doc['metrics']['state_check.threshold'] ?? null;
+                        $currentThreshold[$label]['warning'] = $doc['metrics']['state_check.threshold'] ?? null;
                     }
                     if ($doc['attributes']['threshold_type'] === 'critical') {
-                        $currentThreshold['critical'] = $doc['metrics']['state_check.threshold'] ?? null;
+                        $currentThreshold[$label]['critical'] = $doc['metrics']['state_check.threshold'] ?? null;
                     }
                 }
 
                 // Is this a threshold document then add the values and timestamps
                 if (array_key_exists('state_check.perfdata', $doc['metrics'])) {
                     $values->addValue($doc['metrics']['state_check.perfdata'] ?? null);
-                    $crits->addValue($currentThreshold['critical'] ?? null);
-                    $warns->addValue($currentThreshold['warning'] ?? null);
+                    $crits->addValue($currentThreshold[$label]['critical'] ?? null);
+                    $warns->addValue($currentThreshold[$label]['warning'] ?? null);
                     $ts = (int) end($d['fields']['@timestamp']);
                     $dataset->addTimestamp($ts);
                     // Reset the placeholder
-                    $currentThreshold = [];
+                    $currentThreshold[$label] = [];
                 }
             }
 
