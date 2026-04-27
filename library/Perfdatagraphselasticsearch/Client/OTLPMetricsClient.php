@@ -48,6 +48,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         }
 
         $this->transport = $transport;
+        // TODO: Currently unused
         $this->maxDataPoints = $maxDataPoints;
     }
 
@@ -257,6 +258,17 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             unset($response);
             unset($hits);
         } while ($hitCount > 0);
+
+        // Remove the empty series from the datasets
+        $ds = $pfr->getDatasets();
+        foreach ($ds as $dataset) {
+            $series = $dataset->getSeries();
+            foreach ($series as $ser) {
+                if ($ser->isEmpty()) {
+                    $dataset->removeSeries($ser->getName());
+                }
+            }
+        }
 
         return $pfr;
     }
