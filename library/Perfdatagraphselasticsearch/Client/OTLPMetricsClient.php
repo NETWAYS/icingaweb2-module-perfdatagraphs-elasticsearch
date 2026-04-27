@@ -254,15 +254,12 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                     $ts = (int) end($d['fields']['@timestamp']);
                     $dataset->addTimestamp($ts);
                     // Reset the placeholder
-                    $currentThreshold[$label] = [];
+                    unset($currentThreshold[$label]);
                 }
             }
 
             $hitCount = count($hits);
             $searchAfter = end($hits)['sort'][0] ?? null;
-
-            unset($response);
-            unset($hits);
         } while ($hitCount > 0);
 
         // Remove the empty series from the datasets
