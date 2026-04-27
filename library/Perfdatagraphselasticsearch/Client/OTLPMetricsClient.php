@@ -253,6 +253,8 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                     $warns->addValue($currentThreshold['warning'] ?? null);
                     $ts = (int) end($d['fields']['@timestamp']);
                     $dataset->addTimestamp($ts);
+                    // Reset the placeholder
+                    $currentThreshold = [];
                 }
             }
 
