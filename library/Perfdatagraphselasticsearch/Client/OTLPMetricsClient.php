@@ -148,6 +148,9 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
 
         $pfr = new PerfdataResponse();
 
+        // Holds the current threshold value for crit/warn that we append only when we have a value
+        $currentThreshold = [];
+
         do {
             if ($searchAfter !== null) {
                 $params['body']['search_after'] = [$searchAfter];
@@ -179,7 +182,6 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                 }
 
                 // Note, each document could be a warn/crit threhold or a value.
-
                 // First, make sure we have a dataset for the given metric label.
                 // Do we have a dataset already?
                 $dataset = $pfr->getDataset($label);
@@ -237,16 +239,18 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                 // Is this a threshold document then add the warns/crits
                 if (array_key_exists('state_check.threshold', $doc['metrics'])) {
                     if ($doc['attributes']['threshold_type'] === 'warning') {
-                        $warns->addValue($doc['metrics']['state_check.threshold'] ?? null);
+                        $currentThreshold['warning'] = $doc['metrics']['state_check.threshold'] ?? null;
                     }
                     if ($doc['attributes']['threshold_type'] === 'critical') {
-                        $crits->addValue($doc['metrics']['state_check.threshold'] ?? null);
+                        $currentThreshold['critical'] = $doc['metrics']['state_check.threshold'] ?? null;
                     }
                 }
 
                 // Is this a threshold document then add the values and timestamps
                 if (array_key_exists('state_check.perfdata', $doc['metrics'])) {
                     $values->addValue($doc['metrics']['state_check.perfdata'] ?? null);
+                    $crits->addValue($currentThreshold['critical'] ?? null);
+                    $warns->addValue($currentThreshold['warning'] ?? null);
                     $ts = (int) end($d['fields']['@timestamp']);
                     $dataset->addTimestamp($ts);
                 }
