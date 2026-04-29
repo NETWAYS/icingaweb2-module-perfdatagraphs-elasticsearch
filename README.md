@@ -8,6 +8,12 @@ This module requires the frontend module:
 
 - https://github.com/NETWAYS/icingaweb2-module-perfdatagraphs
 
+## Known Issues
+
+> too_many_buckets_exception
+
+Lower the `max_data_points` so that less buckets are calculated or reduce the number of metrics being fetched via the `metrics_include/exclude` settings.
+
 ## Installation Requirements
 
 * PHP version ≥ 8.0

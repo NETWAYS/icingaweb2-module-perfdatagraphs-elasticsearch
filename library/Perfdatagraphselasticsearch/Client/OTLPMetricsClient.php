@@ -13,8 +13,11 @@ use Icinga\Application\Config;
 use Icinga\Application\Logger;
 use Icinga\Util\Json;
 
-use GuzzleHttp\Client;
+use DateInterval;
+use DateTimeImmutable;
+use DateTime;
 use Exception;
+use GuzzleHttp\Client;
 
 /**
  * OTLPMetricsClient is used with with Icinga2 ElasticsearchWriter
@@ -48,7 +51,6 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         }
 
         $this->transport = $transport;
-        // TODO: Currently unused
         $this->maxDataPoints = $maxDataPoints;
     }
 
@@ -64,7 +66,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             'api_url' => 'http://localhost:9200',
             'api_index' => 'icinga2',
             'api_timeout' => 10,
-            'api_max_data_points' => 10000,
+            'api_max_data_points' => 5000,
             'api_username' => '',
             'api_password' => '',
             'api_tls_insecure' => false,
@@ -84,17 +86,32 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $baseURI = rtrim($moduleConfig->get('elasticsearch', 'api_url', $default['api_url']), '/');
         $index = rtrim($moduleConfig->get('elasticsearch', 'api_index', $default['api_index']), 'icinga2');
         $timeout = (int) $moduleConfig->get('elasticsearch', 'api_timeout', $default['api_timeout']);
-        $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
         $username = $moduleConfig->get('elasticsearch', 'api_username', $default['api_username']);
         $password = $moduleConfig->get('elasticsearch', 'api_password', $default['api_password']);
         // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
         $tlsVerify = !(bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
+        $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
 
         return new static($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify, $index);
     }
 
     /**
-     * request calls the Opensearch HTTP API, decodes and returns the data.
+     * calculateSteps uses the start and end timestamps to calculate the step parameter
+     */
+    protected function calculateSteps(int $start, int $end, int $maxDataPoints, int $checkInterval = 0): string
+    {
+        $totalSeconds = $end - $start;
+        $stepSeconds = $totalSeconds / $maxDataPoints;
+        // Use the check interval as the minimum step so we don't over-sample.
+        // Fall back to 1s when no check interval is available.
+        $minStep = $checkInterval > 0 ? $checkInterval : 1;
+        $stepSeconds = max($stepSeconds, $minStep);
+
+        return (int)round($stepSeconds) . 's';
+    }
+
+    /**
+     * fetchMetrics calls the ES HTTP API, decodes and returns the data.
      *
      * @param string $hostName host name for the performance data query
      * @param string $serviceName service name for the performance data query
@@ -113,24 +130,59 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         bool $isHostCheck,
         array $includeMetrics,
         array $excludeMetrics,
+        int $checkInterval = 0
     ): PerfdataResponse {
+        $endTime = new DateTimeImmutable();
+        $startTime = $endTime->sub(new DateInterval($from));
+        $start = $startTime->getTimestamp();
+        $end = $endTime->getTimestamp();
+        $step = $this->calculateSteps($start, $end, $this->maxDataPoints, $checkInterval);
+
+        $now = new DateTime();
+        $from = $this->parseDuration($now, $from);
+
         $params = [
-            'size' => 2000,
+            'size' => 0,
             'sort' => '@timestamp:asc',
             'body' => [
-                'fields' => [
-                    ['field' => '@timestamp', 'format' => 'epoch_second' ]
-                ],
+                '_source' => false,
+                'track_total_hits' => false,
                 'query' => [
                     'bool' => [
-                        'must' => [
-                            [ 'match' => [ 'resource.attributes.icinga2.host.name' => $hostName ] ],
-                            [ 'match' => [ 'resource.attributes.icinga2.service.name' => $serviceName ] ],
-                            [ 'match' => [ 'resource.attributes.icinga2.command.name' => $checkCommand ] ]
-                        ],
+                        // Using a term query for exact matches
                         'filter' => [
-                            'range' => [ '@timestamp' => [ 'gte' => $from, 'lte' => 'now', ] ]
+                            ['term' => [ 'resource.attributes.icinga2.host.name' => $hostName ] ],
+                            ['term' => [ 'resource.attributes.icinga2.service.name' => $serviceName ] ],
+                            ['term' => [ 'resource.attributes.icinga2.command.name' => $checkCommand ] ],
+                            ['range' => [ '@timestamp' => [ 'gte' => "$from", 'lte' => 'now/m', ] ]]
                         ],
+                    ]
+                ],
+                'aggs' => [
+                    'by_time_window' => [
+                        'date_histogram' => [
+                            'field' => '@timestamp',
+                            'fixed_interval' => $step,
+                            'format' => 'epoch_millis'
+                        ],
+                        'aggs' => [
+                            'by_perfdata_label' => [
+                                'multi_terms' => [
+                                    'terms' => [
+                                        [ "field" => "attributes.perfdata_label" ],
+                                        [ "field" => "attributes.threshold_type", "missing" => "VALUE" ],
+                                    ],
+                                ],
+                                'aggs' => [
+                                    'threshold' => [
+                                        'avg' => [ 'field' => 'metrics.state_check.threshold' ]
+                                    ],
+                                    'perfdata' => [
+                                        'avg' => [ 'field' => 'metrics.state_check.perfdata' ]
+                                    ]
+                                ]
+                            ]
+                        ]
                     ]
                 ]
             ]
@@ -138,52 +190,66 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
 
         // If it's a hostalive check we dont need the service term
         if ($isHostCheck) {
-            $params['body']['query']['bool']['must'] = [
+            $params['body']['query']['bool']['filter'] = [
                 [ 'term' => [ 'resource.attributes.icinga2.host.name' => $hostName ] ],
-                [ 'term' => [ 'resource.attributes.icinga2.command.name' => $checkCommand ] ]
+                [ 'term' => [ 'resource.attributes.icinga2.command.name' => $checkCommand ] ],
+                ['range' => [ '@timestamp' => [ 'gte' => $from, 'lte' => 'now', ] ]]
             ];
         }
 
-        $searchAfter = null;
-
         $pfr = new PerfdataResponse();
 
-        // Holds the current threshold value for crit/warn that we append only when we have a value
-        $currentThreshold = [];
+        $response = $this->search($params);
 
-        do {
-            if ($searchAfter !== null) {
-                $params['body']['search_after'] = [$searchAfter];
+        if (array_key_exists('error', $response)) {
+            $pfr->addError(Json::encode($response['error']));
+            return $pfr;
+        }
+
+        $buckets = [];
+        if (array_key_exists('aggregations', $response)) {
+            $buckets = $response['aggregations']['by_time_window']['buckets'] ?? [];
+        }
+
+        // We need to add the timestamps later, thus we store them here
+        $timestamps = [];
+
+        foreach ($buckets as $b) {
+            $labelbuckets = $b['by_perfdata_label']['buckets'];
+
+            if (count($labelbuckets) === 0) {
+                continue;
             }
 
-            $response = $this->search($params);
+            $timestamps[] = $b['key'] / 1000;
 
-            if (array_key_exists('error', $response)) {
-                $pfr->addError(Json::encode($response['error']));
-                return $pfr;
-            }
+            // {
+            //   "key" : [
+            //     "pl",
+            //     "VALUE"
+            //   ],
+            //   "key_as_string" : "pl|VALUE",
+            //   "doc_count" : 19,
+            //   "threshold" : {
+            //     "value" : null
+            //   },
+            //   "perfdata" : {
+            //     "value" : 0.0
+            //   }
+            // },
+            foreach ($labelbuckets as $lbucket) {
+                $label_type = $lbucket['key'];
 
-            $hits = [];
-
-            if (array_key_exists('hits', $response)) {
-                $hits = $response['hits']['hits'] ?? [];
-            }
-
-            foreach ($hits as $d) {
-                $doc = $d['_source'];
-                $label = $doc['attributes']['perfdata_label'];
+                $label = $label_type[0];
+                $type = $label_type[1];
 
                 if (!$this->isIncluded($label, $includeMetrics)) {
                     continue;
                 }
-
                 if ($this->isExcluded($label, $excludeMetrics)) {
                     continue;
                 }
 
-                // Note, each document could be a warn/crit threhold or a value.
-                // First, make sure we have a dataset for the given metric label.
-                // Do we have a dataset already?
                 $dataset = $pfr->getDataset($label);
                 // No, then create a new one
                 if (empty($dataset)) {
@@ -191,25 +257,6 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                     $pfr->addDataset($dataset);
                 }
 
-                // -- Example threshold:
-                // "attributes" : {
-                //   "perfdata_label" : "swap",
-                //   "threshold_type" : "critical"
-                // },
-                // "metrics" : {
-                //   "state_check.threshold" : 2.1472215E9
-                // }
-
-                // -- Example value:
-                // "attributes" : {
-                //   "perfdata_label" : "swap",
-                //   "unit" : "bytes"
-                // },
-                // "metrics" : {
-                //   "state_check.perfdata" : 8.588886016E9
-                // }
-
-                // The current series in the dataset
                 $series = $dataset->getSeries();
 
                 // Do we have a value series already?
@@ -219,16 +266,14 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                     $values = new PerfdataSeries('value');
                     $dataset->addSeries($values);
                 }
-
-                // Do we have a value series already?
+                // Do we have a warn series already?
                 if (array_key_exists('warning', $series)) {
                     $warns = $series['warning'];
                 } else {
                     $warns = new PerfdataSeries('warning');
                     $dataset->addSeries($warns);
                 }
-
-                // Do we have a value series already?
+                // Do we have a crit series already?
                 if (array_key_exists('critical', $series)) {
                     $crits = $series['critical'];
                 } else {
@@ -236,35 +281,22 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                     $dataset->addSeries($crits);
                 }
 
-                // Is this a threshold document then add the warns/crits
-                if (array_key_exists('state_check.threshold', $doc['metrics'])) {
-                    if ($doc['attributes']['threshold_type'] === 'warning') {
-                        $currentThreshold[$label]['warning'] = $doc['metrics']['state_check.threshold'] ?? null;
-                    }
-                    if ($doc['attributes']['threshold_type'] === 'critical') {
-                        $currentThreshold[$label]['critical'] = $doc['metrics']['state_check.threshold'] ?? null;
-                    }
+                if ($type === 'VALUE') {
+                    $values->addValue($lbucket['perfdata']['value'] ?? null);
                 }
-
-                // Is this a threshold document then add the values and timestamps
-                if (array_key_exists('state_check.perfdata', $doc['metrics'])) {
-                    $values->addValue($doc['metrics']['state_check.perfdata'] ?? null);
-                    $crits->addValue($currentThreshold[$label]['critical'] ?? null);
-                    $warns->addValue($currentThreshold[$label]['warning'] ?? null);
-                    $ts = (int) end($d['fields']['@timestamp']);
-                    $dataset->addTimestamp($ts);
-                    // Reset the placeholder
-                    unset($currentThreshold[$label]);
+                if ($type === 'warning') {
+                    $warns->addValue($lbucket['threshold']['value'] ?? null);
+                }
+                if ($type === 'critical') {
+                    $crits->addValue($lbucket['threshold']['value'] ?? null);
                 }
             }
-
-            $hitCount = count($hits);
-            $searchAfter = end($hits)['sort'][0] ?? null;
-        } while ($hitCount > 0);
+        }
 
         // Remove the empty series from the datasets
         $ds = $pfr->getDatasets();
         foreach ($ds as $dataset) {
+            $dataset->setTimestamps($timestamps);
             $series = $dataset->getSeries();
             foreach ($series as $ser) {
                 if ($ser->isEmpty()) {
