@@ -209,7 +209,11 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             return $pfr;
         }
 
-        $buckets = $response['aggregations']['by_time_window']['buckets'];
+        $buckets = [];
+        if (array_key_exists('aggregations', $response)) {
+            $buckets = $response['aggregations']['by_time_window']['buckets'] ?? [];
+        }
+
         // We need to add the timestamps later, thus we store them here
         $timestamps = [];
 
