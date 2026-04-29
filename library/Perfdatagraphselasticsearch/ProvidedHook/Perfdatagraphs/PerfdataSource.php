@@ -16,7 +16,6 @@ use Icinga\Application\Config;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Exception\ConnectException;
 
-use DateTime;
 use RuntimeException;
 use Exception;
 
@@ -58,9 +57,6 @@ class PerfdataSource extends PerfdataSourceHook
             return $perfdataresponse;
         }
 
-        $now = new DateTime();
-        $from = $client->parseDuration($now, $req->getDuration());
-
         Benchmark::measure('Fetching performance data from Elasticsearch');
 
         // Let's fetch the data from the Elasticsearch API
@@ -69,7 +65,7 @@ class PerfdataSource extends PerfdataSourceHook
                 $req->getHostname(),
                 $req->getServicename(),
                 $req->getCheckcommand(),
-                $from,
+                $req->getDuration(),
                 $req->isHostCheck(),
                 $req->getIncludeMetrics(),
                 $req->getExcludeMetrics(),

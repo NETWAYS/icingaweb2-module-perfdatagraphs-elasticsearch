@@ -13,8 +13,9 @@ use Icinga\Application\Config;
 use Icinga\Application\Logger;
 use Icinga\Util\Json;
 
-use GuzzleHttp\Client;
+use DateTime;
 use Exception;
+use GuzzleHttp\Client;
 
 /**
  * ElasticsearchClient is used with with Icinga2 ElasticsearchWriter
@@ -83,11 +84,11 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         $baseURI = rtrim($moduleConfig->get('elasticsearch', 'api_url', $default['api_url']), '/');
         $index = rtrim($moduleConfig->get('elasticsearch', 'api_index', $default['api_index']), 'icinga2');
         $timeout = (int) $moduleConfig->get('elasticsearch', 'api_timeout', $default['api_timeout']);
-        $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
         $username = $moduleConfig->get('elasticsearch', 'api_username', $default['api_username']);
         $password = $moduleConfig->get('elasticsearch', 'api_password', $default['api_password']);
         // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
         $tlsVerify = !(bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
+        $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
 
         return new static($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify, $index);
     }
@@ -127,6 +128,9 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         array $includeMetrics,
         array $excludeMetrics,
     ): PerfdataResponse {
+        $now = new DateTime();
+        $from = $this->parseDuration($now, $from);
+
         $params = [
             'size' => 2000,
             'sort' => '@timestamp:asc',
