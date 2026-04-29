@@ -220,6 +220,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         foreach ($buckets as $b) {
             $timestamps[] = $b['key'] / 1000;
             $labelbuckets = $b['by_perfdata_label']['buckets'];
+
             foreach ($labelbuckets as $lbucket) {
                 $label = $lbucket['key'];
 
@@ -262,17 +263,22 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                 }
 
                 $valbuckets = $lbucket['by_threshold_type']['buckets'];
+                // Get each value and add it, we need to add nulls when there's nothing
+                $wValue = $cValue = $vValue = null;
                 foreach ($valbuckets as $v) {
                     if ($v['key'] === 'VALUE') {
-                        $values->addValue($v['avg_perfdata']['value']);
+                        $vValue = $v['avg_perfdata']['value'] ?? null;
                     }
                     if ($v['key'] === 'warning') {
-                        $warns->addValue($v['avg_threshold']['value']);
+                        $wValue = $v['avg_threshold']['value'] ?? null;
                     }
                     if ($v['key'] === 'critical') {
-                        $crits->addValue($v['avg_threshold']['value']);
+                        $cValue = $v['avg_threshold']['value'] ?? null;
                     }
                 }
+                $values->addValue($vValue);
+                $crits->addValue($cValue);
+                $warns->addValue($wValue);
             }
         }
 
