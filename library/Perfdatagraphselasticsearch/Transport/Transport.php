@@ -92,7 +92,7 @@ final class Transport implements ClientInterface
     /**
      * sendRequest uses the HostPool to send the given request to a reachable host
      */
-    public function sendRequest(RequestInterface $request): ResponseInterface
+    public function sendRequest(RequestInterface $request, bool $stream = false): ResponseInterface
     {
         $pingRequest = new Request('HEAD', '/');
         $pingRequest = $this->prepareRequest($pingRequest);
@@ -105,7 +105,7 @@ final class Transport implements ClientInterface
         while ($retryCount < $this->getRetries()) {
             $retryCount++;
             try {
-                $response = $this->client->sendRequest($req);
+                $response = $this->client->sendRequest($req, ['stream' => $stream]);
                 return $response;
             } catch (NetworkExceptionInterface $e) {
                 // Did not reach this host

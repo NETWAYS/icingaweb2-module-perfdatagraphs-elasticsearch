@@ -19,5 +19,6 @@ interface ESInterface
         bool $isHostCheck,
         array $includeMetrics,
         array $excludeMetrics,
+        int $checkInterval
     ): PerfdataResponse;
 }
