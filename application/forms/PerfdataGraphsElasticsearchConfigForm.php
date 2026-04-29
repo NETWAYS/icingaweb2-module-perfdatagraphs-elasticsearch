@@ -73,6 +73,18 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
             'description' => t('Skip the TLS verification'),
             'label' => t('Skip the TLS verification')
         ]);
+
+        $this->addElement('number', 'elasticsearch_api_max_data_points', [
+            'label' => t('The maximum numbers of datapoints each series returns'),
+            'description' => t(' '),
+            'description'   => t(
+                'The maximum numbers of datapoints each series returns.'
+                    . ' The module will use an aggregations query to downsample to this number.'
+                    . ' You can disable aggregation by setting this to 0.'
+            ),
+            'required' => false,
+            'placeholder' => 10000,
+        ]);
     }
 
     public function addSubmitButton()
@@ -160,10 +172,7 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
         $password = $form->getValue('elasticsearch_api_password', '');
         $index = $form->getValue('elasticsearch_api_index', 'icinga2');
         $tlsVerify = (bool) $form->getValue('elasticsearch_api_tls_insecure', false);
-
-        // TODO: Not yet implemented
-        $maxDataPoints = 10000;
-        // $maxDataPoints = $form->getValue('elasticsearch_max_data_points', 10000);
+        $maxDataPoints = (int) $form->getValue('elasticsearch_api_max_data_points', 10000);
 
         $writer = $form->getValue('elasticsearch_icinga_writer', '');
 
