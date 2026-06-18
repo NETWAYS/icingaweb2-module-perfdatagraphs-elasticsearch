@@ -18,6 +18,8 @@ use Exception;
 
 /**
  * ElasticsearchClient is used with with Icinga2 ElasticsearchWriter
+ *
+ * Note that the Icinga2 ElasticsearchWriter is deprecated
  */
 class ElasticsearchClient extends BaseClient implements ESInterface
 {

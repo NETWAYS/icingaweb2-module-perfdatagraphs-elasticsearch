@@ -14,6 +14,7 @@
 
 | Option  | Description | Default value  |
 |---------|-------------|----------------|
+| icinga_writer  | Which Icinga2 Elasticsearch Writer is used to write data (OTLPMetricsWriter, ElasticsearchWriter)  |  |
 | api_url  | Comma-separated URLs for Elasticsearch including the scheme. Example: `https://node2:9200,https://node2:9200`  |  |
 | api_username      | The user for HTTP basic auth. Not used if empty          |  |
 | api_password      | The password for HTTP basic auth. Not used if empty      |  |
