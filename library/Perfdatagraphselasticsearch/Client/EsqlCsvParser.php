@@ -52,19 +52,19 @@ class EsqlCsvParser
 
     private function parseLine(array $csv): EsqlRecord
     {
-        // 0              1             2                          3                          4
-        // avg_threshold, avg_perfdata, attributes.perfdata_label, attributes.threshold_type, bucket_epoch_s
+        // 0              1             2                          3                          4     5
+        // avg_threshold, avg_perfdata, attributes.perfdata_label, attributes.threshold_type, unit, bucket_epoch_s
         // 0.0,,load1,min,1783430880
         // ,0.09,load1,,1783430880
         // 3.0,,load15,warning,1783430880
         $label = $csv[2];
-        $timestamp = $csv[4];
+        $timestamp = $csv[5];
         $value = $csv[1] === '' ? null: floatval($csv[1]);
         $recordType = $csv[3] === '' ? 'value': $csv[3];
+        $unit = $csv[4] === '' ? '': $csv[4];
 
         $warn = null;
         $crit = null;
-        $unit = '';
 
         if ($recordType == 'warning') {
             $warn = $csv[0] === '' ? null: floatval($csv[0]);

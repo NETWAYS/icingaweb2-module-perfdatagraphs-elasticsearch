@@ -170,7 +170,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $esql .= sprintf(
             "| STATS avg_threshold = AVG(AVG_OVER_TIME(metrics.state_check.threshold)),"
                 . "avg_perfdata = AVG(AVG_OVER_TIME(metrics.state_check.perfdata)) "
-                . "BY attributes.perfdata_label, attributes.threshold_type, bucket = TBUCKET(%s seconds)",
+                . "BY attributes.perfdata_label, attributes.threshold_type, attributes.unit, bucket = TBUCKET(%s seconds)",
             $step,
         );
 
@@ -181,7 +181,6 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
 
         $response = $this->query($esql);
 
-        // var_dump($response->getBody());
         $stream = new EsqlCsvParser($response->getBody(), true);
 
         $timestamps = [];
@@ -233,6 +232,11 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             } else {
                 $crits = new PerfdataSeries('critical');
                 $dataset->addSeries($crits);
+            }
+
+            $unit = $record->getUnit();
+            if ($unit !== '') {
+                $dataset->setUnit($record->getUnit());
             }
 
             $type = $record->getRecordType();
