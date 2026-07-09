@@ -85,7 +85,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         }
 
         $baseURI = rtrim($moduleConfig->get('elasticsearch', 'api_url', $default['api_url']), '/');
-        $index = rtrim($moduleConfig->get('elasticsearch', 'api_index', $default['api_index']), 'icinga2');
+        $index = $moduleConfig->get('elasticsearch', 'api_index', $default['api_index']);
         $timeout = (int) $moduleConfig->get('elasticsearch', 'api_timeout', $default['api_timeout']);
         $username = $moduleConfig->get('elasticsearch', 'api_username', $default['api_username']);
         $password = $moduleConfig->get('elasticsearch', 'api_password', $default['api_password']);
@@ -140,7 +140,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $step = $this->calculateSteps($start, $end, $this->maxDataPoints, $checkInterval);
 
         $now = new DateTime();
-        $from = $this->parseDuration($now, $from);
+        $parsedFrom = $this->parseDuration($now, $from);
 
         // The index for the query
         $esql = sprintf("TS %s", $this->index);
@@ -164,7 +164,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             );
         }
 
-        $esql .= sprintf("AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW()", $from);
+        $esql .= sprintf("AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW()", $parsedFrom);
 
         // The aggregated values we want
         $esql .= sprintf(
@@ -186,7 +186,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             return $pfr;
         }
 
-        $stream = new EsqlCsvParser($response->getBody(), true);
+        $stream = new EsqlCsvParser($response->getBody());
 
         $timestamps = [];
 
@@ -264,9 +264,9 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         foreach ($ds as $dataset) {
             $dataset->setTimestamps($timestamps);
             $series = $dataset->getSeries();
-            foreach ($series as $ser) {
-                if ($ser->isEmpty()) {
-                    $dataset->removeSeries($ser->getName());
+            foreach ($series as $s) {
+                if ($s->isEmpty()) {
+                    $dataset->removeSeries($s->getName());
                 }
             }
         }

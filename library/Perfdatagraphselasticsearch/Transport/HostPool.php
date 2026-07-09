@@ -64,7 +64,7 @@ class HostPool implements HostPoolInterface
      */
     public function next(RequestInterface $request): Host
     {
-        // TODO: We could use a RequestFactory in the constructur,
+        // TODO: We could use a RequestFactory in the constructor,
         // then we would not have to pass a request to ping hosts here.
         foreach ($this->hosts as $host) {
             if ($host->isReachable()) {

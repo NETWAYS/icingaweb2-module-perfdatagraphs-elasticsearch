@@ -82,7 +82,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         }
 
         $baseURI = rtrim($moduleConfig->get('elasticsearch', 'api_url', $default['api_url']), '/');
-        $index = rtrim($moduleConfig->get('elasticsearch', 'api_index', $default['api_index']), 'icinga2');
+        $index = $moduleConfig->get('elasticsearch', 'api_index', $default['api_index']);
         $timeout = (int) $moduleConfig->get('elasticsearch', 'api_timeout', $default['api_timeout']);
         $username = $moduleConfig->get('elasticsearch', 'api_username', $default['api_username']);
         $password = $moduleConfig->get('elasticsearch', 'api_password', $default['api_password']);
@@ -130,7 +130,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         int $checkInterval = 0
     ): PerfdataResponse {
         $now = new DateTime();
-        $from = $this->parseDuration($now, $from);
+        $parsedFrom = $this->parseDuration($now, $from);
 
         $params = [
             'size' => 2000,
@@ -149,7 +149,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
                             [ 'term' => [ 'check_command.keyword' => $checkCommand ] ]
                         ],
                         'filter' => [
-                            'range' => [ 'timestamp' => [ 'gte' => $from, 'lte' => 'now', ] ]
+                            'range' => [ 'timestamp' => [ 'gte' => $parsedFrom, 'lte' => 'now', ] ]
                         ],
                     ]
                 ]
