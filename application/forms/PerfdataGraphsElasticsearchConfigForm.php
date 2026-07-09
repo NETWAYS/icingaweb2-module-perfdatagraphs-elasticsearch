@@ -51,16 +51,47 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
             'placeholder' => 'https://node2:9200,https://node2:9200',
         ]);
 
-        $this->addElement('text', 'elasticsearch_api_username', [
-            'label' => t('API basic auth username'),
-            'description' => t('The user for HTTP basic auth. Not used if empty')
+
+        $this->addElement('select', 'elasticsearch_api_auth_method', [
+            'label' => 'API authentication method',
+            'description' => 'Authentication method to use for the API',
+            'multiOptions' => [
+                'none' => t('None'),
+                'basic' => 'Basic Auth',
+                'token' => 'Token',
+            ],
+            'class' => 'autosubmit',
+            'required' => false,
         ]);
 
-        $this->addElement('password', 'elasticsearch_api_password', [
-            'label' => t('API HTTP basic auth password'),
-            'description' => t('The password for HTTP basic auth. Not used if empty'),
-            'renderPassword' => true
-        ]);
+
+        if (isset($formData['elasticsearch_api_auth_method']) && $formData['elasticsearch_api_auth_method'] === 'basic') {
+            $this->addElement('text', 'elasticsearch_api_auth_username', [
+                'label' => t('API basic auth username'),
+                'description' => t('The user for HTTP basic auth. Not used if empty')
+            ]);
+
+            $this->addElement('password', 'elasticsearch_api_auth_password', [
+                'label' => t('API HTTP basic auth password'),
+                'description' => t('The password for HTTP basic auth. Not used if empty'),
+                'renderPassword' => true
+            ]);
+        }
+
+        if (isset($formData['elasticsearch_api_auth_method']) && $formData['elasticsearch_api_auth_method'] === 'token') {
+            $this->addElement('text', 'elasticsearch_api_auth_tokentype', [
+                'label' => t('Token type for the Authorization header'),
+                'description' => t('API Token type for the Authorization header (default: Bearer)'),
+                'value' => 'Bearer',
+            ]);
+
+            $this->addElement('password', 'elasticsearch_api_auth_tokenvalue', [
+                'label' => t('Token for the Authorization header'),
+                'description' => t('API Token for the Authorization header'),
+                'renderPassword' => true,
+                'required' => true,
+            ]);
+        }
 
         $this->addElement('number', 'elasticsearch_api_timeout', [
             'label' => t('HTTP timeout in seconds'),
@@ -167,18 +198,29 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
     {
         $baseURI = $form->getValue('elasticsearch_api_url', 'http://localhost:9200');
         $timeout = (int) $form->getValue('elasticsearch_api_timeout', 10);
-        $username = $form->getValue('elasticsearch_api_username', '');
-        $password = $form->getValue('elasticsearch_api_password', '');
+        $writer = $form->getValue('elasticsearch_icinga_writer', '');
         $index = $form->getValue('elasticsearch_api_index', 'icinga2');
         $tlsVerify = (bool) $form->getValue('elasticsearch_api_tls_insecure', false);
         $maxDataPoints = (int) $form->getValue('elasticsearch_api_max_data_points', 5000);
 
-        $writer = $form->getValue('elasticsearch_icinga_writer', '');
+        $authMethod = $form->getValue('elasticsearch_api_auth_method', 'none');
+        $authTokenType = $form->getValue('elasticsearch_api_auth_tokentype', 'Bearer');
+        $authTokenValue = $form->getValue('elasticsearch_api_auth_tokenvalue', '');
+        $authUsername = $form->getValue('elasticsearch_api_auth_username', '');
+        $authPassword = $form->getValue('elasticsearch_api_auth_password', '');
+
+        $auth = [
+            'method' => mb_strtolower($authMethod),
+            'tokentype' => $authTokenType,
+            'tokenvalue' => $authTokenValue,
+            'username' => $authUsername,
+            'password' => $authPassword,
+        ];
 
         if ($writer === 'ElasticsearchWriter') {
-            $c = new ElasticsearchClient($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify, $index);
+            $c = new ElasticsearchClient($baseURI, $maxDataPoints, $timeout, $tlsVerify, $index, $auth);
         } else {
-            $c = new OTLPMetricsClient($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify);
+            $c = new OTLPMetricsClient($baseURI, $maxDataPoints, $timeout, $tlsVerify, $index, $auth);
         }
 
         $status = $c->status();

@@ -28,12 +28,11 @@ class ElasticsearchClient extends BaseClient implements ESInterface
 
     public function __construct(
         string $urls,
-        string $username,
-        string $password,
         int $maxDataPoints,
         int $timeout,
         bool $tlsVerify,
-        string $index = 'icinga2'
+        string $index = 'icinga2',
+        array $auth = [],
     ) {
         $u = explode(',', $urls);
 
@@ -46,10 +45,15 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         $pool->setHosts($u);
         $transport = new Transport($HTTPClient, $pool);
 
-        if (isset($username)) {
-            $transport->setBasicAuth($username, $password = '');
+        if ($auth['method'] === 'basic') {
+            $transport->setBasicAuth($auth['username'] ?? '', $auth['password'] ?? '');
         }
 
+        if ($auth['method'] === 'token') {
+            $transport->setHeader($auth['tokentype'] ?? 'Bearer', $auth['tokenvalue'] ?? '');
+        }
+
+        $this->index = $index;
         $this->transport = $transport;
         // Note, this is currently unused
         $this->maxDataPoints = $maxDataPoints;
@@ -68,8 +72,11 @@ class ElasticsearchClient extends BaseClient implements ESInterface
             'api_index' => 'icinga2',
             'api_timeout' => 10,
             'api_max_data_points' => 5000,
-            'api_username' => '',
-            'api_password' => '',
+            'api_auth_method' => 'none',
+            'api_auth_tokentype' => 'Bearer',
+            'api_auth_tokenvalue' => '',
+            'api_auth_username' => '',
+            'api_auth_password' => '',
             'api_tls_insecure' => false,
         ];
 
@@ -80,20 +87,34 @@ class ElasticsearchClient extends BaseClient implements ESInterface
                 $moduleConfig = Config::module('perfdatagraphselasticsearch');
             } catch (Exception $e) {
                 Logger::error('Failed to load Perfdata Graphs Elasticsearch module configuration: %s', $e);
-                return $default;
+                return new static($default['api_url'], $default['api_max_data_points'], 10, true, 'icinga2', []);
             }
         }
 
         $baseURI = rtrim($moduleConfig->get('elasticsearch', 'api_url', $default['api_url']), '/');
         $index = $moduleConfig->get('elasticsearch', 'api_index', $default['api_index']);
         $timeout = (int) $moduleConfig->get('elasticsearch', 'api_timeout', $default['api_timeout']);
-        $username = $moduleConfig->get('elasticsearch', 'api_username', $default['api_username']);
-        $password = $moduleConfig->get('elasticsearch', 'api_password', $default['api_password']);
+
+        // Auth values
+        $authMethod = $moduleConfig->get('elasticsearch', 'api_auth_method', $default['api_auth_method']);
+        $authTokenType = $moduleConfig->get('elasticsearch', 'api_auth_tokentype', $default['api_auth_tokentype']);
+        $authTokenValue = $moduleConfig->get('elasticsearch', 'api_auth_tokenvalue', $default['api_auth_tokenvalue']);
+        $authUsername = $moduleConfig->get('elasticsearch', 'api_auth_username', $default['api_auth_username']);
+        $authPassword = $moduleConfig->get('elasticsearch', 'api_auth_password', $default['api_auth_password']);
+
         // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
         $tlsVerify = !(bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
         $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
 
-        return new static($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify, $index);
+        $auth = [
+            'method' => mb_strtolower($authMethod),
+            'tokentype' => $authTokenType,
+            'tokenvalue' => $authTokenValue,
+            'username' => $authUsername,
+            'password' => $authPassword,
+        ];
+
+        return new static($baseURI, $maxDataPoints, $timeout, $tlsVerify, $index, $auth);
     }
 
     protected function getDatasetKeys(array $fields): array
