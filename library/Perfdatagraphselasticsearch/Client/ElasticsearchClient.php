@@ -49,6 +49,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         }
 
         $this->transport = $transport;
+        // Note, this is currently unused
         $this->maxDataPoints = $maxDataPoints;
     }
 
