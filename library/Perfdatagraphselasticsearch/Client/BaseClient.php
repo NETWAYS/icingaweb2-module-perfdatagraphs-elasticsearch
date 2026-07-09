@@ -22,8 +22,6 @@ use Exception;
 abstract class BaseClient
 {
     protected Transport $transport;
-
-    // TODO: Currently unused
     protected int $maxDataPoints;
 
     /**
@@ -31,7 +29,7 @@ abstract class BaseClient
      * into something we can use with the API (from parameter).
      *
      * @param string $duration ISO8601 Duration
-     * @param string $now current time (used in testing)
+     * @param DateTime $now current time (used in testing)
      * @return string
      */
     public function parseDuration(\DateTime $now, string $duration): string
@@ -135,6 +133,31 @@ abstract class BaseClient
         }
 
         return $d;
+    }
+
+    public function query(string $query = '')
+    {
+        $uri = '_query?format=csv';
+        $method = 'POST';
+
+        $body = Json::encode(['query' => $query]);
+
+        $req = new Request($method, $uri, [], $body);
+
+        $response = $this->transport->sendRequest($req, true);
+
+        if ($response->getStatusCode() !== 200) {
+            try {
+                $responseBody = $response->getBody()->getContents();
+                $d = Json::decode($responseBody, true);
+                return $d;
+            } catch (JsonDecodeException $e) {
+                Logger::error('Failed to decode response: %s', $e);
+                return [];
+            }
+        }
+
+        return $response;
     }
 
     /**

@@ -13,8 +13,9 @@ use Icinga\Application\Config;
 use Icinga\Application\Logger;
 use Icinga\Util\Json;
 
-use GuzzleHttp\Client;
+use DateTime;
 use Exception;
+use GuzzleHttp\Client;
 
 /**
  * ElasticsearchClient is used with with Icinga2 ElasticsearchWriter
@@ -50,6 +51,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         }
 
         $this->transport = $transport;
+        // Note, this is currently unused
         $this->maxDataPoints = $maxDataPoints;
     }
 
@@ -65,7 +67,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
             'api_url' => 'http://localhost:9200',
             'api_index' => 'icinga2',
             'api_timeout' => 10,
-            'api_max_data_points' => 10000,
+            'api_max_data_points' => 5000,
             'api_username' => '',
             'api_password' => '',
             'api_tls_insecure' => false,
@@ -83,13 +85,13 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         }
 
         $baseURI = rtrim($moduleConfig->get('elasticsearch', 'api_url', $default['api_url']), '/');
-        $index = rtrim($moduleConfig->get('elasticsearch', 'api_index', $default['api_index']), 'icinga2');
+        $index = $moduleConfig->get('elasticsearch', 'api_index', $default['api_index']);
         $timeout = (int) $moduleConfig->get('elasticsearch', 'api_timeout', $default['api_timeout']);
-        $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
         $username = $moduleConfig->get('elasticsearch', 'api_username', $default['api_username']);
         $password = $moduleConfig->get('elasticsearch', 'api_password', $default['api_password']);
         // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
         $tlsVerify = !(bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
+        $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
 
         return new static($baseURI, $username, $password, $maxDataPoints, $timeout, $tlsVerify, $index);
     }
@@ -128,7 +130,11 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         bool $isHostCheck,
         array $includeMetrics,
         array $excludeMetrics,
+        int $checkInterval = 0
     ): PerfdataResponse {
+        $now = new DateTime();
+        $parsedFrom = $this->parseDuration($now, $from);
+
         $params = [
             'size' => 2000,
             'sort' => '@timestamp:asc',
@@ -146,7 +152,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
                             [ 'term' => [ 'check_command.keyword' => $checkCommand ] ]
                         ],
                         'filter' => [
-                            'range' => [ 'timestamp' => [ 'gte' => $from, 'lte' => 'now', ] ]
+                            'range' => [ 'timestamp' => [ 'gte' => $parsedFrom, 'lte' => 'now', ] ]
                         ],
                     ]
                 ]
