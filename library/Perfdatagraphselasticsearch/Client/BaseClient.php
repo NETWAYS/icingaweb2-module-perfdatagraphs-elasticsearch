@@ -145,7 +145,17 @@ abstract class BaseClient
         $req = new Request($method, $uri, [], $body);
 
         $response = $this->transport->sendRequest($req, true);
-        // TODO: Error handling
+
+        if ($response->getStatusCode() !== 200) {
+            try {
+                $responseBody = $response->getBody()->getContents();
+                $d = Json::decode($responseBody, true);
+                return $d;
+            } catch (JsonDecodeException $e) {
+                Logger::error('Failed to decode response: %s', $e);
+                return [];
+            }
+        }
 
         return $response;
     }

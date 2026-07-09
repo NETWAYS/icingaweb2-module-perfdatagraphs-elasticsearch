@@ -181,6 +181,11 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
 
         $response = $this->query($esql);
 
+        if (is_array($response) && array_key_exists('error', $response)) {
+            $pfr->addError(Json::encode($response['error']));
+            return $pfr;
+        }
+
         $stream = new EsqlCsvParser($response->getBody(), true);
 
         $timestamps = [];
