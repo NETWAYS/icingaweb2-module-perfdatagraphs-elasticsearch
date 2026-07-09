@@ -6,6 +6,10 @@ This module requires the frontend module:
 
 - https://github.com/NETWAYS/icingaweb2-module-perfdatagraphs
 
+Other Icinga and Elasticsearch integrations we provide:
+
+- https://github.com/NETWAYS/check_elasticsearch
+
 ## Installation Requirements
 
 * PHP version ≥ 8.0

@@ -28,10 +28,13 @@ To install this module, follow the setup instructions for the **extras** reposit
 
 | Option  | Description | Default value  |
 |---------|-------------|----------------|
-| icinga_writer  | Which Icinga2 Elasticsearch Writer is used to write data (OTLPMetricsWriter, ElasticsearchWriter)  |  |
+| icinga_writer  | Which Icinga2 Elasticsearch Writer is used to write data (OTLPMetricsWriter, ElasticsearchWriter)        |  |
 | api_url  | Comma-separated URLs for Elasticsearch including the scheme. Example: `https://node2:9200,https://node2:9200`  |  |
-| api_username      | The user for HTTP basic auth. Not used if empty          |  |
-| api_password      | The password for HTTP basic auth. Not used if empty      |  |
-| api_index      | The index that Icinag2 used for the performance data |  |
-| api_timeout       | HTTP timeout for the API in seconds. Should be higher than 0  | `10` (seconds)  |
-| api_tls_insecure  | Skip the TLS verification  | `false` (unchecked)  |
+| api_index      | The index that Icinag2 used for the performance data                                                     |  |
+| api_timeout       | HTTP timeout for the API in seconds. Should be higher than 0                                          | `10` (seconds)  |
+| api_tls_insecure  | Skip the TLS verification                                                                             | `false` (unchecked)  |
+| api_auth_method     | Authentication method to use for the API                                                            | none (none,basic,token) |
+| api_auth_username    | HTTP basic auth username                                                                           |   |
+| api_auth_password    | HTTP basic auth password                                                                           |   |
+| api_auth_tokentype   | Token type for the Authorization header                                                            | `Bearer` |
+| api_auth_tokenvalue  | Token for the Authorization header                                                                 |   |
