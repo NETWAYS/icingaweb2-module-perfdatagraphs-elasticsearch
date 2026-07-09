@@ -7,6 +7,8 @@ use Icinga\Module\Perfdatagraphselasticsearch\Client\OTLPMetricsClient;
 
 use Icinga\Forms\ConfigForm;
 
+use Zend_Validate_Callback;
+
 /**
  * PerfdataGraphsElasticsearchConfigForm represents the configuration form for the PerfdataGraphs Elasticsearch Module.
  */
@@ -105,6 +107,19 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
             'label' => t('Skip the TLS verification')
         ]);
 
+        // TODO: We should switch to ipl\Validator\GreaterThanValidator;
+        $greaterThanValidator = new Zend_Validate_Callback(function ($value) {
+            if ($value <= 0) {
+                return false;
+            }
+            return true;
+        });
+
+        $greaterThanValidator->setMessage(
+            $this->translate('The cannot be smaller than 1'),
+            Zend_Validate_Callback::INVALID_VALUE
+        );
+
         $this->addElement('number', 'elasticsearch_api_max_data_points', [
             'label' => t('The maximum numbers of datapoints each series returns'),
             'description' => t(' '),
@@ -114,6 +129,7 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
             ),
             'required' => false,
             'placeholder' => 10000,
+            'validators' => [$greaterThanValidator],
         ]);
     }
 
@@ -201,7 +217,7 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
         $writer = $form->getValue('elasticsearch_icinga_writer', '');
         $index = $form->getValue('elasticsearch_api_index', 'icinga2');
         $tlsVerify = (bool) $form->getValue('elasticsearch_api_tls_insecure', false);
-        $maxDataPoints = (int) $form->getValue('elasticsearch_api_max_data_points', 5000);
+        $maxDataPoints = (int) $form->getValue('elasticsearch_api_max_data_points', 10000);
 
         $authMethod = $form->getValue('elasticsearch_api_auth_method', 'none');
         $authTokenType = $form->getValue('elasticsearch_api_auth_tokentype', 'Bearer');

@@ -125,7 +125,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
 
         // Ensure we don't divide by zero
         if ($maxDataPoints < 1) {
-            Logger::warning('Perfdatagraphselasticsearch is set too small. Review the module configuration');
+            Logger::warning('Perfdatagraphs Elasticsearch maxDataPoints is set too small. Review the module configuration');
             $maxDataPoints = 1;
         }
 
