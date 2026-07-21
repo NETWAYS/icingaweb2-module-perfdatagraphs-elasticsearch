@@ -107,7 +107,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
 
         $auth = [
-            'method' => mb_strtolower($authMethod),
+            'method' => strtolower($authMethod),
             'tokentype' => $authTokenType,
             'tokenvalue' => $authTokenValue,
             'username' => $authUsername,
@@ -224,11 +224,11 @@ class ElasticsearchClient extends BaseClient implements ESInterface
                 foreach ($keys as $valueKey) {
                     $metricname = preg_replace('/\.value$/', '', str_replace('check_result.perfdata.', '', $valueKey));
 
-                    if (!$this->isIncluded($metricname, $includeMetrics)) {
+                    if (!Transformer::isIncluded($metricname, $includeMetrics)) {
                         continue;
                     }
 
-                    if ($this->isExcluded($metricname, $excludeMetrics)) {
+                    if (Transformer::isExcluded($metricname, $excludeMetrics)) {
                         continue;
                     }
 
