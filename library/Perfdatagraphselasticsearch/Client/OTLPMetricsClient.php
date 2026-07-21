@@ -185,13 +185,12 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         array $excludeMetrics,
         int $checkInterval = 0
     ): PerfdataResponse {
-        $endTime = new DateTimeImmutable();
-        $startTime = $endTime->sub(new DateInterval($from));
-        $start = $startTime->getTimestamp();
-        $end = $endTime->getTimestamp();
-        $step = $this->calculateSteps($start, $end, $this->maxDataPoints, $checkInterval);
+        $now = new DateTimeImmutable();
 
-        $now = new DateTime();
+        $start = $now->sub(new DateInterval($from))->getTimestamp();
+        $end = $now->getTimestamp();
+
+        $step = $this->calculateSteps($start, $end, $this->maxDataPoints, $checkInterval);
         $parsedFrom = $this->parseDuration($now, $from);
 
         // The index for the query

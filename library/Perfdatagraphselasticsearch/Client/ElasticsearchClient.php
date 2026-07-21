@@ -13,7 +13,7 @@ use Icinga\Application\Config;
 use Icinga\Application\Logger;
 use Icinga\Util\Json;
 
-use DateTime;
+use DateTimeImmutable;
 use Exception;
 use GuzzleHttp\Client;
 
@@ -178,7 +178,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         array $excludeMetrics,
         int $checkInterval = 0
     ): PerfdataResponse {
-        $now = new DateTime();
+        $now = new DateTimeImmutable();
         $parsedFrom = $this->parseDuration($now, $from);
 
         $params = [

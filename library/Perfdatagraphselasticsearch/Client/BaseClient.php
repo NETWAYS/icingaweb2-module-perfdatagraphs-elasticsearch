@@ -14,6 +14,7 @@ use GuzzleHttp\Exception\ConnectException;
 
 use DateInterval;
 use DateTime;
+use DateTimeImmutable;
 use Exception;
 
 /**
@@ -32,7 +33,7 @@ abstract class BaseClient
      * @param DateTime $now current time (used in testing)
      * @return string
      */
-    public function parseDuration(\DateTime $now, string $duration): string
+    public function parseDuration(\DateTimeImmutable $now, string $duration): string
     {
         try {
             $int = new DateInterval($duration);
@@ -41,8 +42,7 @@ abstract class BaseClient
             $int = new DateInterval('PT12H');
         }
 
-        $now->sub($int);
-        return $now->format('Y-m-d\TH:i:s');
+        return $now->sub($int)->format('Y-m-d\TH:i:s');
     }
 
     protected function createQuery(array $params): string
