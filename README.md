@@ -12,7 +12,7 @@ Other Icinga and Elasticsearch integrations we provide:
 
 ## Installation Requirements
 
-* PHP version ≥ 8.0
+* PHP version ≥ 8.2
 * Icinga2 ElasticsearchWriter or OTLPMetricsWriter
 * IcingaDB or IDO Database
 * Elasticsearch (OTLP requires at least Elasticsearch 9.2)
