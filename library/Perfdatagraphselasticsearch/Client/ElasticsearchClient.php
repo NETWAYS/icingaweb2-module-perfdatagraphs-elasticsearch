@@ -107,7 +107,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
 
         $auth = [
-            'method' => mb_strtolower($authMethod),
+            'method' => strtolower($authMethod),
             'tokentype' => $authTokenType,
             'tokenvalue' => $authTokenValue,
             'username' => $authUsername,

@@ -226,7 +226,7 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
         $authPassword = $form->getValue('elasticsearch_api_auth_password', '');
 
         $auth = [
-            'method' => mb_strtolower($authMethod),
+            'method' => strtolower($authMethod),
             'tokentype' => $authTokenType,
             'tokenvalue' => $authTokenValue,
             'username' => $authUsername,

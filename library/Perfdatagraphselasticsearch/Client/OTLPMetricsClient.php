@@ -45,11 +45,12 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $pool->setHosts($u);
         $transport = new Transport($HTTPClient, $pool);
 
-        if ($auth['method'] === 'basic') {
+        $method = $auth['method'] ?? '';
+        if ($method === 'basic') {
             $transport->setBasicAuth($auth['username'] ?? '', $auth['password'] ?? '');
         }
 
-        if ($auth['method'] === 'token') {
+        if ($method === 'token') {
             $transport->setHeader($auth['tokentype'] ?? 'Bearer', $auth['tokenvalue'] ?? '');
         }
 
@@ -106,7 +107,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
 
         $auth = [
-            'method' => mb_strtolower($authMethod),
+            'method' => strtolower($authMethod),
             'tokentype' => $authTokenType,
             'tokenvalue' => $authTokenValue,
             'username' => $authUsername,
@@ -135,7 +136,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $minStep = $checkInterval > 0 ? $checkInterval : 1;
         $stepSeconds = max($stepSeconds, $minStep);
 
-        return (int)round($stepSeconds);
+        return (int)ceil($stepSeconds);
     }
 
     /**
@@ -185,17 +186,17 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         } else {
             $esql .= sprintf(
                 "| WHERE resource.attributes.icinga2.host.name == \"%s\""
-                    . "AND resource.attributes.icinga2.command.name == \"%s\"",
+                    . " AND resource.attributes.icinga2.command.name == \"%s\"",
                 $hostName,
                 $checkCommand,
             );
         }
 
-        $esql .= sprintf("AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW()", $parsedFrom);
+        $esql .= sprintf(" AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW()", $parsedFrom);
 
         // The aggregated values we want
         $esql .= sprintf(
-            "| STATS avg_threshold = AVG(AVG_OVER_TIME(metrics.state_check.threshold)),"
+            " | STATS avg_threshold = AVG(AVG_OVER_TIME(metrics.state_check.threshold)),"
                 . "avg_perfdata = AVG(AVG_OVER_TIME(metrics.state_check.perfdata)) "
                 . "BY attributes.perfdata_label, attributes.threshold_type, attributes.unit, bucket = TBUCKET(%s seconds)",
             $step,

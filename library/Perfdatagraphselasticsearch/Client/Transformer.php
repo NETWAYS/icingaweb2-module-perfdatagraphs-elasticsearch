@@ -133,17 +133,12 @@ class Transformer
 
             $type = $record->getRecordType();
 
-            if ($type === 'value') {
-                $values->addValue($record->getValue());
-            }
-
-            if ($type === 'warning') {
-                $warns->addValue($record->getWarning());
-            }
-
-            if ($type === 'critical') {
-                $crits->addValue($record->getCritical());
-            }
+            match ($type) {
+                'value' => $values->addValue($record->getValue()),
+                'warning' => $warns->addValue($record->getWarning()),
+                'critical' => $crits->addValue($record->getCritical()),
+                default => null,
+            };
         }
 
         // Remove the empty series from the datasets
