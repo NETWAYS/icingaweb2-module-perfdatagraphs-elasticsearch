@@ -147,10 +147,9 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
 
         $this->addElement('number', 'elasticsearch_api_max_data_points', [
             'label' => t('The maximum numbers of datapoints each series returns'),
-            'description' => t(' '),
-            'description'   => t(
+            'description' => t(
                 'The maximum numbers of datapoints each series returns.'
-                    . ' Only used in the OTLPMetricsWriter. The module will this in the TBUCKET query downsample the data.'
+                    . ' Only used in the OTLPMetricsWriter. The module will use this in the TBUCKET query downsample the data.'
             ),
             'required' => false,
             'placeholder' => 10000,
