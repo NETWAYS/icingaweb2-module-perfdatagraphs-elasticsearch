@@ -29,7 +29,7 @@ class EsqlCsvParser
         // ,0.09,load1,,1783430880
         // 3.0,,load15,warning,1783430880
         try {
-            while (($csv = fgetcsv($this->resource)) !== false) {
+            while (($csv = fgetcsv($this->resource, escape: "\\")) !== false) {
                 if (!isset($csv) || (count($csv) == 1 && $csv[0] == null)) {
                     continue;
                 }

@@ -45,49 +45,6 @@ abstract class BaseClient
         return $now->format('Y-m-d\TH:i:s');
     }
 
-    /**
-     * isIncluded checks if the given metric should be included in the response
-     *
-     * @param string $metricname
-     * @param array $includeMetrics
-     * @return bool
-     */
-    protected function isIncluded($metricname, array $includeMetrics = []): bool
-    {
-        // All are included if not set
-        if (count($includeMetrics) === 0) {
-            return true;
-        }
-        foreach ($includeMetrics as $pattern) {
-            if (fnmatch($pattern, $metricname)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * isExcluded checks if the given metric should be excluded from the response
-     *
-     * @param string $metricname
-     * @param array $excludeMetrics
-     * @return bool
-     */
-    protected function isExcluded($metricname, array $excludeMetrics = []): bool
-    {
-        // None are exlucded if not set
-        if (count($excludeMetrics) === 0) {
-            return false;
-        }
-
-        foreach ($excludeMetrics as $pattern) {
-            if (fnmatch($pattern, $metricname)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     protected function createQuery(array $params): string
     {
         return Query::build($params);
