@@ -24,7 +24,7 @@ use GuzzleHttp\Client;
  */
 class OTLPMetricsClient extends BaseClient implements ESInterface
 {
-    protected string $index;
+    protected readonly string $index;
 
     public function __construct(
         string $urls,
