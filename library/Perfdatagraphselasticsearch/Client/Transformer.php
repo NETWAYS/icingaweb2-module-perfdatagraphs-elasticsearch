@@ -44,7 +44,7 @@ class Transformer
      */
     public static function isExcluded($metricname, array $excludeMetrics = []): bool
     {
-        // None are exlucded if not set
+        // None are exclucded if not set
         if (count($excludeMetrics) === 0) {
             return false;
         }
@@ -63,7 +63,7 @@ class Transformer
      *
      * @param GuzzleHttp\Psr7\Response $response the data to transform
      * @param array $includeMetrics metrics to include in the response
-     * @param array $excludeMetrics metrics to exlude from the response
+     * @param array $excludeMetrics metrics to exclude from the response
      * @return PerfdataResponse
      */
     public static function transform(
