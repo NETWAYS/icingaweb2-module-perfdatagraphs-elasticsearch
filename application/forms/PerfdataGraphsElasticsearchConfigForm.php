@@ -11,6 +11,8 @@ use Zend_Validate_Callback;
 
 /**
  * PerfdataGraphsElasticsearchConfigForm represents the configuration form for the PerfdataGraphs Elasticsearch Module.
+ * TODO: Icinga Web 2.14 introduced a new Web\Form\ConfigForm, we can migrate when 2.14 is more prevalent
+ * Then we can also use ipl Validators.
  */
 class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
 {
@@ -95,6 +97,30 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
             ]);
         }
 
+        $this->addElement('checkbox', 'elasticsearch_api_auth_mtls', [
+            'label' => t('Use client certificate (mTLS)'),
+            'description' => t('Use client certificate (mTLS) for the connection'),
+            'class' => 'autosubmit',
+        ]);
+
+        if (isset($formData['elasticsearch_api_auth_mtls']) && $formData['elasticsearch_api_auth_mtls'] === '1') {
+            $this->addElement('text', 'elasticsearch_api_auth_mtls_cert', [
+                'label' => t('mTLS client certificate path'),
+                'description' => t('Path to the client certificate'),
+                'required' => true,
+            ]);
+            $this->addElement('text', 'elasticsearch_api_auth_mtls_key', [
+                'label' => t('mTLS client key path'),
+                'description' => t('Path to the client key'),
+                'required' => true,
+            ]);
+            $this->addElement('text', 'elasticsearch_api_auth_mtls_ca', [
+                'label' => t('mTLS client CA path'),
+                'description' => t('Path to the CA. Defaults to system CA'),
+                'required' => false,
+            ]);
+        }
+
         $this->addElement('number', 'elasticsearch_api_timeout', [
             'label' => t('HTTP timeout in seconds'),
             'description' => t('HTTP timeout for the API in seconds. Should be higher than 0'),
@@ -107,7 +133,6 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
             'label' => t('Skip the TLS verification')
         ]);
 
-        // TODO: We should switch to ipl\Validator\GreaterThanValidator;
         $greaterThanValidator = new Zend_Validate_Callback(function ($value) {
             if ($value <= 0) {
                 return false;
@@ -218,12 +243,17 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
         $index = $form->getValue('elasticsearch_api_index', 'icinga2');
         $tlsVerify = (bool) $form->getValue('elasticsearch_api_tls_insecure', false);
         $maxDataPoints = (int) $form->getValue('elasticsearch_api_max_data_points', 10000);
-
+        // Auth values
         $authMethod = $form->getValue('elasticsearch_api_auth_method', 'none');
         $authTokenType = $form->getValue('elasticsearch_api_auth_tokentype', 'Bearer');
         $authTokenValue = $form->getValue('elasticsearch_api_auth_tokenvalue', '');
         $authUsername = $form->getValue('elasticsearch_api_auth_username', '');
         $authPassword = $form->getValue('elasticsearch_api_auth_password', '');
+        // mTLS values
+        $authMTLS = $form->getValue('elasticsearch_api_auth_mtls', false);
+        $authMTLSCert = $form->getValue('elasticsearch_api_auth_mtls_cert', '');
+        $authMTLSKey = $form->getValue('elasticsearch_api_auth_mtls_key', '');
+        $authMTLSCA = $form->getValue('elasticsearch_api_auth_mtls_ca', '');
 
         $auth = [
             'method' => strtolower($authMethod),
@@ -231,6 +261,10 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
             'tokenvalue' => $authTokenValue,
             'username' => $authUsername,
             'password' => $authPassword,
+            'mtls' => $authMTLS,
+            'mtls_cert' => $authMTLSCert,
+            'mtls_key' => $authMTLSKey,
+            'mtls_ca' => $authMTLSCA,
         ];
 
         if ($writer === 'ElasticsearchWriter') {

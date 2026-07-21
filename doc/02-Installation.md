@@ -38,3 +38,7 @@ To install this module, follow the setup instructions for the **extras** reposit
 | api_auth_password    | HTTP basic auth password                                                                           |   |
 | api_auth_tokentype   | Token type for the Authorization header                                                            | `Bearer` |
 | api_auth_tokenvalue  | Token for the Authorization header                                                                 |   |
+| api_auth_mtls     | Use client certificate (mTLS) for the connection                                                      | `false` |
+| api_auth_mtls_cert  | Path to the client certificate file                                                                 |  |
+| api_auth_mtls_key   | Path to the client key file                                                                         |  |
+| api_auth_mtls_ca    | Path to the client CA file                                                                          |  |

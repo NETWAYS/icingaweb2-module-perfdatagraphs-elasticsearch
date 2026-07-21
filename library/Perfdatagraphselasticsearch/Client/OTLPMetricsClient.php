@@ -36,10 +36,21 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
     ) {
         $u = explode(',', $urls);
 
-        $HTTPClient = new Client([
+        $clientConf = [
             'timeout' => $timeout,
-            'verify' => $tlsVerify
-        ]);
+            'verify' => $tlsVerify,
+        ];
+
+        $mtls = $auth['mtls'] ?? false;
+        if ($mtls) {
+            $clientConf['cert'] = $auth['mtls_cert'] ?? '';
+            $clientConf['ssl_key'] = $auth['mtls_key'] ?? '';
+            if (($auth['mtls_ca'] ?? '') !== '') {
+                $clientConf['verify'] = $auth['mtls_ca'] ?? '';
+            }
+        }
+
+        $HTTPClient = new Client($clientConf);
 
         $pool = new HostPool($HTTPClient);
         $pool->setHosts($u);
@@ -77,6 +88,10 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             'api_auth_tokenvalue' => '',
             'api_auth_username' => '',
             'api_auth_password' => '',
+            'api_auth_mtls' => false,
+            'api_auth_mtls_cert' => '',
+            'api_auth_mtls_key' => '',
+            'api_auth_mtls_ca' => '',
             'api_tls_insecure' => false,
         ];
 
@@ -101,6 +116,11 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $authTokenValue = $moduleConfig->get('elasticsearch', 'api_auth_tokenvalue', $default['api_auth_tokenvalue']);
         $authUsername = $moduleConfig->get('elasticsearch', 'api_auth_username', $default['api_auth_username']);
         $authPassword = $moduleConfig->get('elasticsearch', 'api_auth_password', $default['api_auth_password']);
+        // mTLS values
+        $authMTLS = $moduleConfig->get('elasticsearch', 'api_auth_mtls', $default['api_auth_mtls']);
+        $authMTLSCert = $moduleConfig->get('elasticsearch', 'api_auth_mtls_cert', $default['api_auth_mtls_cert']);
+        $authMTLSKey = $moduleConfig->get('elasticsearch', 'api_auth_mtls_key', $default['api_auth_mtls_key']);
+        $authMTLSCA = $moduleConfig->get('elasticsearch', 'api_auth_mtls_ca', $default['api_auth_mtls_ca']);
 
         // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
         $tlsVerify = !(bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
@@ -112,6 +132,10 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             'tokenvalue' => $authTokenValue,
             'username' => $authUsername,
             'password' => $authPassword,
+            'mtls' => $authMTLS,
+            'mtls_cert' => $authMTLSCert,
+            'mtls_key' => $authMTLSKey,
+            'mtls_ca' => $authMTLSCA,
         ];
 
         return new static($baseURI, $maxDataPoints, $timeout, $tlsVerify, $index, $auth);
