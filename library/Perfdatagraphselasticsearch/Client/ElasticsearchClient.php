@@ -28,7 +28,6 @@ class ElasticsearchClient extends BaseClient implements ESInterface
 
     public function __construct(
         string $urls,
-        int $maxDataPoints,
         int $timeout,
         bool $tlsVerify,
         string $index = 'icinga2',
@@ -67,8 +66,6 @@ class ElasticsearchClient extends BaseClient implements ESInterface
 
         $this->index = $index;
         $this->transport = $transport;
-        // Note, this is currently unused
-        $this->maxDataPoints = $maxDataPoints;
     }
 
     /**
@@ -83,7 +80,6 @@ class ElasticsearchClient extends BaseClient implements ESInterface
             'api_url' => 'http://localhost:9200',
             'api_index' => 'icinga2',
             'api_timeout' => 10,
-            'api_max_data_points' => 5000,
             'api_auth_method' => 'none',
             'api_auth_tokentype' => 'Bearer',
             'api_auth_tokenvalue' => '',
@@ -103,7 +99,13 @@ class ElasticsearchClient extends BaseClient implements ESInterface
                 $moduleConfig = Config::module('perfdatagraphselasticsearch');
             } catch (Exception $e) {
                 Logger::error('Failed to load Perfdata Graphs Elasticsearch module configuration: %s', $e);
-                return new static($default['api_url'], $default['api_max_data_points'], 10, true, 'icinga2', []);
+                return new static(
+                    urls: $default['api_url'],
+                    timeout: 10,
+                    tlsVerify: true,
+                    index: 'icinga2',
+                    auth: []
+                );
             }
         }
 
@@ -125,7 +127,6 @@ class ElasticsearchClient extends BaseClient implements ESInterface
 
         // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
         $tlsVerify = !(bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
-        $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
 
         $auth = [
             'method' => strtolower($authMethod),
@@ -139,7 +140,13 @@ class ElasticsearchClient extends BaseClient implements ESInterface
             'mtls_ca' => $authMTLSCA,
         ];
 
-        return new static($baseURI, $maxDataPoints, $timeout, $tlsVerify, $index, $auth);
+        return new static(
+            urls: $baseURI,
+            timeout: $timeout,
+            tlsVerify: $tlsVerify,
+            index: $index,
+            auth: $auth
+        );
     }
 
     protected function getDatasetKeys(array $fields): array
@@ -306,6 +313,12 @@ class ElasticsearchClient extends BaseClient implements ESInterface
             unset($hits);
         } while ($hitCount > 0);
 
+        $seriesMap = [
+            'value' => $values,
+            'warning' => $warnings,
+            'critical' => $criticals,
+        ];
+
         // Add it to the PerfdataResponse
         foreach (array_keys($values) as $metric) {
             $u = '';
@@ -317,19 +330,17 @@ class ElasticsearchClient extends BaseClient implements ESInterface
 
             $s->setTimestamps($timestamps[$metric]);
 
-            if (array_key_exists($metric, $values)) {
-                $v = new PerfdataSeries('value', $values[$metric]);
-                $s->addSeries($v);
-            }
-
-            if (array_key_exists($metric, $warnings) && !empty($warnings)) {
-                $w = new PerfdataSeries('warning', $warnings[$metric]);
-                $s->addSeries($w);
-            }
-
-            if (array_key_exists($metric, $criticals) && !empty($criticals)) {
-                $c = new PerfdataSeries('critical', $criticals[$metric]);
-                $s->addSeries($c);
+            // Add the actual series to the response
+            foreach ($seriesMap as $label => $data) {
+                if (!array_key_exists($metric, $data)) {
+                    continue;
+                }
+                $series = $data[$metric];
+                $hasValues = array_filter($series, static fn($v) => $v !== null) !== [];
+                if (!$hasValues) {
+                    continue;
+                }
+                $s->addSeries(new PerfdataSeries($label, $series));
             }
 
             $pfr->addDataset($s);

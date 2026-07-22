@@ -138,7 +138,14 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             'mtls_ca' => $authMTLSCA,
         ];
 
-        return new static($baseURI, $maxDataPoints, $timeout, $tlsVerify, $index, $auth);
+        return new static(
+            urls: $baseURI,
+            maxDataPoints: $maxDataPoints,
+            timeout: $timeout,
+            tlsVerify: $tlsVerify,
+            index: $index,
+            auth: $auth
+        );
     }
 
     /**
