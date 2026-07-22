@@ -203,6 +203,9 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         // The index for the query
         $esql = sprintf("TS %s", $this->index);
 
+        // TODO: Do we need to escape the parameters for the TS query?
+        // Icinga2 host/services names can be whatever.
+
         // The service or host filter
         if (!$isHostCheck) {
             $esql .= sprintf(

@@ -15,7 +15,7 @@ use Exception;
 class HostPool implements HostPoolInterface
 {
     // List of hosts for this HostPool
-    protected $hosts = [];
+    protected array $hosts = [];
     // HTTP client to connect to hosts
     protected ClientInterface $client;
 
@@ -43,7 +43,7 @@ class HostPool implements HostPoolInterface
         $path = $request->getUri()->getPath();
         $uri = $host->getURL();
 
-        $request->withUri(
+        $request = $request->withUri(
             $request->getUri()
                 ->withHost($uri->getHost())
                 ->withPort($uri->getPort())

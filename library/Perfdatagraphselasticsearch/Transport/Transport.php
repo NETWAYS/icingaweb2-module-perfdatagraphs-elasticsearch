@@ -18,8 +18,8 @@ use InvalidArgumentException;
 final class Transport implements ClientInterface
 {
     private array $headers = [];
-    private string $user;
-    private string $password;
+    private string $user = '';
+    private string $password = '';
 
     // Number of retries when sending HTTP requests
     protected int $retries = 3;
@@ -150,7 +150,7 @@ final class Transport implements ClientInterface
         // Add the configured basic auth to the request
         $uri = $request->getUri();
         if (empty($uri->getUserInfo())) {
-            if (isset($this->user)) {
+            if ($this->user !== '') {
                 $request = $request->withUri($uri->withUserInfo($this->user, $this->password));
             }
         }
