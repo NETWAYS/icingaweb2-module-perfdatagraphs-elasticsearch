@@ -267,9 +267,22 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
         ];
 
         if ($writer === 'ElasticsearchWriter') {
-            $c = new ElasticsearchClient($baseURI, $maxDataPoints, $timeout, $tlsVerify, $index, $auth);
+            $c = new ElasticsearchClient(
+                urls: $baseURI,
+                timeout: $timeout,
+                tlsVerify: $tlsVerify,
+                index: $index,
+                auth: $auth,
+            );
         } else {
-            $c = new OTLPMetricsClient($baseURI, $maxDataPoints, $timeout, $tlsVerify, $index, $auth);
+            $c = new OTLPMetricsClient(
+                urls: $baseURI,
+                maxDataPoints: $maxDataPoints,
+                timeout: $timeout,
+                tlsVerify: $tlsVerify,
+                index: $index,
+                auth: $auth
+            );
         }
 
         $status = $c->status();

@@ -5,7 +5,7 @@ namespace Icinga\Module\Perfdatagraphselasticsearch\Client;
 use Icinga\Module\Perfdatagraphs\Model\PerfdataResponse;
 
 /**
- * ESInterface
+ * ESInterface for the different Clients
  */
 interface ESInterface
 {

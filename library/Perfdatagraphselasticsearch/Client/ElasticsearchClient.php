@@ -13,7 +13,7 @@ use Icinga\Application\Config;
 use Icinga\Application\Logger;
 use Icinga\Util\Json;
 
-use DateTime;
+use DateTimeImmutable;
 use Exception;
 use GuzzleHttp\Client;
 
@@ -28,7 +28,6 @@ class ElasticsearchClient extends BaseClient implements ESInterface
 
     public function __construct(
         string $urls,
-        int $maxDataPoints,
         int $timeout,
         bool $tlsVerify,
         string $index = 'icinga2',
@@ -67,8 +66,6 @@ class ElasticsearchClient extends BaseClient implements ESInterface
 
         $this->index = $index;
         $this->transport = $transport;
-        // Note, this is currently unused
-        $this->maxDataPoints = $maxDataPoints;
     }
 
     /**
@@ -77,13 +74,12 @@ class ElasticsearchClient extends BaseClient implements ESInterface
      * @param Config $moduleConfig configuration to load (used for testing)
      * @return $this
      */
-    public static function fromConfig(Config $moduleConfig = null): ESInterface
+    public static function fromConfig(?Config $moduleConfig = null): ESInterface
     {
         $default = [
             'api_url' => 'http://localhost:9200',
             'api_index' => 'icinga2',
             'api_timeout' => 10,
-            'api_max_data_points' => 5000,
             'api_auth_method' => 'none',
             'api_auth_tokentype' => 'Bearer',
             'api_auth_tokenvalue' => '',
@@ -103,7 +99,13 @@ class ElasticsearchClient extends BaseClient implements ESInterface
                 $moduleConfig = Config::module('perfdatagraphselasticsearch');
             } catch (Exception $e) {
                 Logger::error('Failed to load Perfdata Graphs Elasticsearch module configuration: %s', $e);
-                return new static($default['api_url'], $default['api_max_data_points'], 10, true, 'icinga2', []);
+                return new static(
+                    urls: $default['api_url'],
+                    timeout: 10,
+                    tlsVerify: true,
+                    index: 'icinga2',
+                    auth: []
+                );
             }
         }
 
@@ -125,7 +127,6 @@ class ElasticsearchClient extends BaseClient implements ESInterface
 
         // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
         $tlsVerify = !(bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
-        $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
 
         $auth = [
             'method' => strtolower($authMethod),
@@ -139,7 +140,13 @@ class ElasticsearchClient extends BaseClient implements ESInterface
             'mtls_ca' => $authMTLSCA,
         ];
 
-        return new static($baseURI, $maxDataPoints, $timeout, $tlsVerify, $index, $auth);
+        return new static(
+            urls: $baseURI,
+            timeout: $timeout,
+            tlsVerify: $tlsVerify,
+            index: $index,
+            auth: $auth
+        );
     }
 
     protected function getDatasetKeys(array $fields): array
@@ -178,7 +185,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         array $excludeMetrics,
         int $checkInterval = 0
     ): PerfdataResponse {
-        $now = new DateTime();
+        $now = new DateTimeImmutable();
         $parsedFrom = $this->parseDuration($now, $from);
 
         $params = [
@@ -261,55 +268,40 @@ class ElasticsearchClient extends BaseClient implements ESInterface
                     $warnKey = preg_replace('/\.value$/', '.warn', $valueKey);
                     $critKey = preg_replace('/\.value$/', '.crit', $valueKey);
 
-                    if (!isset($values[$metricname])) {
-                        $values[$metricname] = [];
-                    }
-
-                    if (!isset($warnings[$metricname])) {
-                        $warnings[$metricname] = [];
-                    }
-
-                    if (!isset($criticals[$metricname])) {
-                        $criticals[$metricname] = [];
-                    }
+                    $values[$metricname] ??= [];
+                    $warnings[$metricname] ??= [];
+                    $criticals[$metricname] ??= [];
 
                     if (array_key_exists($unitKey, $doc)) {
-                        $units[$metricname][] = end($doc[$unitKey]);
+                        $units[$metricname][] = $doc[$unitKey][0] ?? '';
                     }
 
-                    $timestamps[$metricname][] = (int) end($doc['@timestamp']);
-
-                    if (array_key_exists($valueKey, $doc)) {
-                        $values[$metricname][] = end($doc[$valueKey]);
-                    } else {
-                        $values[$metricname][] = null;
-                    }
-
-                    if (array_key_exists($warnKey, $doc)) {
-                        $warnings[$metricname][] = end($doc[$warnKey]);
-                    } else {
-                        $warnings[$metricname][] = null;
-                    }
-
-                    if (array_key_exists($critKey, $doc)) {
-                        $criticals[$metricname][] = end($doc[$critKey]);
-                    } else {
-                        $criticals[$metricname][] = null;
-                    }
+                    $timestamps[$metricname][] = (int) ($doc['@timestamp'][0] ?? 0);
+                    $values[$metricname][] = $doc[$valueKey][0] ?? null;
+                    $warnings[$metricname][] = $doc[$warnKey][0] ?? null;
+                    $criticals[$metricname][] = $doc[$critKey][0] ?? null;
                 }
             }
 
             $hitCount = count($hits);
+            // Note, can change this to array_last in the future
             $searchAfter = end($hits)['sort'][0] ?? null;
 
             unset($response);
             unset($hits);
         } while ($hitCount > 0);
 
+        $seriesMap = [
+            'value' => $values,
+            'warning' => $warnings,
+            'critical' => $criticals,
+        ];
+
         // Add it to the PerfdataResponse
         foreach (array_keys($values) as $metric) {
             $u = '';
             if (array_key_exists($metric, $units)) {
+                // Note, can change this to array_last in the future
                 $u = end($units[$metric]);
             }
 
@@ -317,19 +309,26 @@ class ElasticsearchClient extends BaseClient implements ESInterface
 
             $s->setTimestamps($timestamps[$metric]);
 
-            if (array_key_exists($metric, $values)) {
-                $v = new PerfdataSeries('value', $values[$metric]);
-                $s->addSeries($v);
-            }
+            // Add the actual series to the response
+            foreach ($seriesMap as $label => $data) {
+                if (!array_key_exists($metric, $data)) {
+                    continue;
+                }
+                $series = $data[$metric];
 
-            if (array_key_exists($metric, $warnings) && !empty($warnings)) {
-                $w = new PerfdataSeries('warning', $warnings[$metric]);
-                $s->addSeries($w);
-            }
+                // Check if the series contains only null
+                $hasValues = false;
+                foreach ($series as $v) {
+                    if ($v !== null) {
+                        $hasValues = true;
+                        break;
+                    }
+                }
+                if (!$hasValues) {
+                    continue;
+                }
 
-            if (array_key_exists($metric, $criticals) && !empty($criticals)) {
-                $c = new PerfdataSeries('critical', $criticals[$metric]);
-                $s->addSeries($c);
+                $s->addSeries(new PerfdataSeries($label, $series));
             }
 
             $pfr->addDataset($s);

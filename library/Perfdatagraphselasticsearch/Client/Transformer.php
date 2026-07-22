@@ -13,7 +13,6 @@ use GuzzleHttp\Psr7\Response;
  */
 class Transformer
 {
-
     /**
      * isIncluded checks if the given metric should be included in the response
      *
@@ -103,28 +102,15 @@ class Transformer
             }
 
             $series = $dataset->getSeries();
+            // Add series to the dataset if it exists
+            foreach (['value', 'warning', 'critical'] as $key) {
+                if (!array_key_exists($key, $series)) {
+                    $series[$key] = new PerfdataSeries($key);
+                    $dataset->addSeries($series[$key]);
+                }
+            }
 
-            // Do we have a value series already?
-            if (array_key_exists('value', $series)) {
-                $values = $series['value'];
-            } else {
-                $values = new PerfdataSeries('value');
-                $dataset->addSeries($values);
-            }
-            // Do we have a warn series already?
-            if (array_key_exists('warning', $series)) {
-                $warns = $series['warning'];
-            } else {
-                $warns = new PerfdataSeries('warning');
-                $dataset->addSeries($warns);
-            }
-            // Do we have a crit series already?
-            if (array_key_exists('critical', $series)) {
-                $crits = $series['critical'];
-            } else {
-                $crits = new PerfdataSeries('critical');
-                $dataset->addSeries($crits);
-            }
+            [$values, $warns, $crits] = [$series['value'], $series['warning'], $series['critical']];
 
             $unit = $record->getUnit();
             if ($unit !== '') {

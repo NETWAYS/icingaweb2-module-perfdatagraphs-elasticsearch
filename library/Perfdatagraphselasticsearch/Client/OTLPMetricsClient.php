@@ -76,7 +76,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
      * @param Config $moduleConfig configuration to load (used for testing)
      * @return $this
      */
-    public static function fromConfig(Config $moduleConfig = null): ESInterface
+    public static function fromConfig(?Config $moduleConfig = null): ESInterface
     {
         $default = [
             'api_url' => 'http://localhost:9200',
@@ -138,7 +138,14 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             'mtls_ca' => $authMTLSCA,
         ];
 
-        return new static($baseURI, $maxDataPoints, $timeout, $tlsVerify, $index, $auth);
+        return new static(
+            urls: $baseURI,
+            maxDataPoints: $maxDataPoints,
+            timeout: $timeout,
+            tlsVerify: $tlsVerify,
+            index: $index,
+            auth: $auth
+        );
     }
 
     /**
@@ -185,13 +192,12 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         array $excludeMetrics,
         int $checkInterval = 0
     ): PerfdataResponse {
-        $endTime = new DateTimeImmutable();
-        $startTime = $endTime->sub(new DateInterval($from));
-        $start = $startTime->getTimestamp();
-        $end = $endTime->getTimestamp();
-        $step = $this->calculateSteps($start, $end, $this->maxDataPoints, $checkInterval);
+        $now = new DateTimeImmutable();
 
-        $now = new DateTime();
+        $start = $now->sub(new DateInterval($from))->getTimestamp();
+        $end = $now->getTimestamp();
+
+        $step = $this->calculateSteps($start, $end, $this->maxDataPoints, $checkInterval);
         $parsedFrom = $this->parseDuration($now, $from);
 
         // The index for the query
