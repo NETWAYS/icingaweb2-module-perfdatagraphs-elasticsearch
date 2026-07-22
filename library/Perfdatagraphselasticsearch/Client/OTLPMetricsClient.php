@@ -76,7 +76,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
      * @param Config $moduleConfig configuration to load (used for testing)
      * @return $this
      */
-    public static function fromConfig(Config $moduleConfig = null): ESInterface
+    public static function fromConfig(?Config $moduleConfig = null): ESInterface
     {
         $default = [
             'api_url' => 'http://localhost:9200',

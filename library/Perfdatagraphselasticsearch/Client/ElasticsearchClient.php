@@ -74,7 +74,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
      * @param Config $moduleConfig configuration to load (used for testing)
      * @return $this
      */
-    public static function fromConfig(Config $moduleConfig = null): ESInterface
+    public static function fromConfig(?Config $moduleConfig = null): ESInterface
     {
         $default = [
             'api_url' => 'http://localhost:9200',
@@ -268,45 +268,23 @@ class ElasticsearchClient extends BaseClient implements ESInterface
                     $warnKey = preg_replace('/\.value$/', '.warn', $valueKey);
                     $critKey = preg_replace('/\.value$/', '.crit', $valueKey);
 
-                    if (!isset($values[$metricname])) {
-                        $values[$metricname] = [];
-                    }
-
-                    if (!isset($warnings[$metricname])) {
-                        $warnings[$metricname] = [];
-                    }
-
-                    if (!isset($criticals[$metricname])) {
-                        $criticals[$metricname] = [];
-                    }
+                    $values[$metricname] ??= [];
+                    $warnings[$metricname] ??= [];
+                    $criticals[$metricname] ??= [];
 
                     if (array_key_exists($unitKey, $doc)) {
-                        $units[$metricname][] = end($doc[$unitKey]);
+                        $units[$metricname][] = $doc[$unitKey][0] ?? '';
                     }
 
-                    $timestamps[$metricname][] = (int) end($doc['@timestamp']);
-
-                    if (array_key_exists($valueKey, $doc)) {
-                        $values[$metricname][] = end($doc[$valueKey]);
-                    } else {
-                        $values[$metricname][] = null;
-                    }
-
-                    if (array_key_exists($warnKey, $doc)) {
-                        $warnings[$metricname][] = end($doc[$warnKey]);
-                    } else {
-                        $warnings[$metricname][] = null;
-                    }
-
-                    if (array_key_exists($critKey, $doc)) {
-                        $criticals[$metricname][] = end($doc[$critKey]);
-                    } else {
-                        $criticals[$metricname][] = null;
-                    }
+                    $timestamps[$metricname][] = (int) ($doc['@timestamp'][0] ?? 0);
+                    $values[$metricname][] = $doc[$valueKey][0] ?? null;
+                    $warnings[$metricname][] = $doc[$warnKey][0] ?? null;
+                    $criticals[$metricname][] = $doc[$critKey][0] ?? null;
                 }
             }
 
             $hitCount = count($hits);
+            // Note, can change this to array_last in the future
             $searchAfter = end($hits)['sort'][0] ?? null;
 
             unset($response);
@@ -323,6 +301,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
         foreach (array_keys($values) as $metric) {
             $u = '';
             if (array_key_exists($metric, $units)) {
+                // Note, can change this to array_last in the future
                 $u = end($units[$metric]);
             }
 
@@ -336,10 +315,19 @@ class ElasticsearchClient extends BaseClient implements ESInterface
                     continue;
                 }
                 $series = $data[$metric];
-                $hasValues = array_filter($series, static fn($v) => $v !== null) !== [];
+
+                // Check if the series contains only null
+                $hasValues = false;
+                foreach ($series as $v) {
+                    if ($v !== null) {
+                        $hasValues = true;
+                        break;
+                    }
+                }
                 if (!$hasValues) {
                     continue;
                 }
+
                 $s->addSeries(new PerfdataSeries($label, $series));
             }
 
