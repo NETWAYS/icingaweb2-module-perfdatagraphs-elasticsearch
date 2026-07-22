@@ -16,7 +16,7 @@ To install this module, follow the setup instructions for the **extras** reposit
 
 ## From source
 
-1. Clone a Icinga Web Performance Data Graphs Backend repository into `/usr/share/icingaweb2/modules/perfdatagraphselasticsearch/`
+1. Clone the Icinga Web Performance Data Graphs Backend repository into `/usr/share/icingaweb2/modules/perfdatagraphselasticsearch/`
 
 2. Enable the module using the `Configuration → Modules` menu or the `icingacli`
 
@@ -33,6 +33,7 @@ To install this module, follow the setup instructions for the **extras** reposit
 | api_index      | The index that Icinag2 used for the performance data                                                     |  |
 | api_timeout       | HTTP timeout for the API in seconds. Should be higher than 0                                          | `10` (seconds)  |
 | api_tls_insecure  | Skip the TLS verification                                                                             | `false` (unchecked)  |
+| api_max_data_points  | The maximum numbers of datapoints each series returns. Only used in the OTLPMetricsWriter. The module will use this in the TBUCKET query downsample the data. | 10000  |
 | api_auth_method     | Authentication method to use for the API                                                            | none (none,basic,token) |
 | api_auth_username    | HTTP basic auth username                                                                           |   |
 | api_auth_password    | HTTP basic auth password                                                                           |   |
