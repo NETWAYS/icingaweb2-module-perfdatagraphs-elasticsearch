@@ -240,7 +240,8 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
         $timeout = (int) $form->getValue('elasticsearch_api_timeout', 10);
         $writer = $form->getValue('elasticsearch_icinga_writer', '');
         $index = $form->getValue('elasticsearch_api_index', 'icinga2');
-        $tlsVerify = (bool) $form->getValue('elasticsearch_api_tls_insecure', false);
+        // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
+        $tlsVerify = !(bool) $form->getValue('elasticsearch_api_tls_insecure', false);
         $maxDataPoints = (int) $form->getValue('elasticsearch_api_max_data_points', 10000);
         // Auth values
         $authMethod = $form->getValue('elasticsearch_api_auth_method', 'none');
@@ -256,6 +257,7 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
 
         $auth = [
             'method' => strtolower($authMethod),
+            'tlsverify' => $tlsVerify,
             'tokentype' => $authTokenType,
             'tokenvalue' => $authTokenValue,
             'username' => $authUsername,
@@ -285,7 +287,7 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
             );
         }
 
-        $status = $c->status();
+        $status = $c->status(auth: $auth);
 
         return $status;
     }

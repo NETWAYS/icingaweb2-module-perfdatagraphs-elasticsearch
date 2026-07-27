@@ -121,9 +121,44 @@ abstract class BaseClient
      * status tests connectivity to the Elasticsearch cluster
      * @return array
      */
-    public function status(): array
+    public function status(array $auth): array
     {
-        $req = new Request('GET', '/', [], null);
+        $method = $auth['method'] ?? 'none';
+
+        $authOptions = [];
+
+        $authOptions['verify'] = $auth['tlsverify'] ?? true;
+
+        if ($method === 'basic') {
+            $authOptions['auth'] = [
+                $auth['username'] ?? '',
+                $auth['password'] ?? ''
+            ];
+        }
+
+        if ($method === 'token') {
+            $t = $auth['tokentype'] ?? 'Bearer';
+            $v = $auth['tokenvalue'] ?? '';
+            $authOptions['headers'] = [
+                    'Authorization' =>  $t .' '. $v,
+            ];
+        }
+
+        $mtls = $auth['mtls'] ?? false;
+
+        if ($mtls === false) {
+            return $authOptions;
+        }
+
+        if ($mtls) {
+            $authOptions['cert'] = $auth['mtls_cert'] ?? '';
+            $authOptions['ssl_key'] = $auth['mtls_key'] ?? '';
+            if (($auth['mtls_ca'] ?? '') !== '') {
+                $authOptions['verify'] = $auth['mtls_ca'] ?? '';
+            }
+        }
+
+        $req = new Request('GET', '/', $authOptions, null);
 
         try {
             $response = $this->transport->sendRequest($req);
