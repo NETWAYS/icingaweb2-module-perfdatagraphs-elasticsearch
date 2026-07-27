@@ -240,6 +240,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
 
         $pfr = new PerfdataResponse();
 
+        Logger::debug('Calling query API with query: %s', $esql);
         $response = $this->query($esql);
 
         if (is_array($response) && array_key_exists('error', $response)) {

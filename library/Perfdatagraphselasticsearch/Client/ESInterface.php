@@ -9,7 +9,7 @@ use Icinga\Module\Perfdatagraphs\Model\PerfdataResponse;
  */
 interface ESInterface
 {
-    public function status(): array;
+    public function status(array $auth): array;
 
     public function fetchMetrics(
         string $hostName,
