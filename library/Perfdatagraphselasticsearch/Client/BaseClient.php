@@ -88,6 +88,10 @@ abstract class BaseClient
         $response = $this->transport->sendRequest($req);
         $responseBody = $response->getBody()->getContents();
 
+        if ($response->getStatusCode() !== 200) {
+            throw new QueryException('Failed to run query: %s', $responseBody);
+        }
+
         $d = [];
         try {
             $d = Json::decode($responseBody, true);
@@ -116,6 +120,8 @@ abstract class BaseClient
 
         if ($response->getStatusCode() !== 200) {
             try {
+                // We only want the contents if there's an error
+                // since we stream the response if OK
                 $responseBody = $response->getBody()->getContents();
                 throw new QueryException('Failed to run query: %s', $responseBody);
             } catch (JsonDecodeException $e) {

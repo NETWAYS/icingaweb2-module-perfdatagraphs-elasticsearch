@@ -203,9 +203,10 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
 
         // The index for the query
         $query = sprintf("TS %s", $this->index);
-
-        // TODO: Do we need to escape the parameters for the TS query?
-        // Icinga2 host/services names can be whatever.
+        // Escape double quotes and backslashes to prevent breaking the ESQL
+        $escapedHost = addcslashes($hostName, '"\\');
+        $escapedService = addcslashes($serviceName, '"\\');
+        $escapedCommand = addcslashes($checkCommand, '"\\');
 
         // The service or host filter
         if (!$isHostCheck) {
@@ -213,16 +214,16 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                 "| WHERE resource.attributes.icinga2.host.name == \"%s\""
                     . " AND resource.attributes.icinga2.service.name == \"%s\""
                     . " AND resource.attributes.icinga2.command.name == \"%s\"",
-                $hostName,
-                $serviceName,
-                $checkCommand,
+                $escapedHost,
+                $escapedService,
+                $escapedCommand,
             );
         } else {
             $query .= sprintf(
                 "| WHERE resource.attributes.icinga2.host.name == \"%s\""
                     . " AND resource.attributes.icinga2.command.name == \"%s\"",
-                $hostName,
-                $checkCommand,
+                $escapedHost,
+                $escapedCommand,
             );
         }
 
