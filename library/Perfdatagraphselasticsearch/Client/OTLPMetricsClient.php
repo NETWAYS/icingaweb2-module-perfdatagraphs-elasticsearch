@@ -228,6 +228,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $esql .= sprintf(" AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW()", $parsedFrom);
 
         // The aggregated values we want
+        // Note, avg_threshold is expected in the parser. Ensure to update the parser if you update the name
         $esql .= sprintf(
             " | STATS avg_threshold = AVG(AVG_OVER_TIME(metrics.state_check.threshold)),"
                 . "avg_perfdata = AVG(AVG_OVER_TIME(metrics.state_check.perfdata)) "

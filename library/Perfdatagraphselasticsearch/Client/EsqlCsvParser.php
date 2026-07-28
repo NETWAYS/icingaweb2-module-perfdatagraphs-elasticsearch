@@ -34,7 +34,7 @@ class EsqlCsvParser
                     continue;
                 }
 
-                // Skip the header
+                // Skip the header. Note, avg_threshold is defined in the query. Ensure to change this if the query changes
                 if ($csv[0] === 'avg_threshold') {
                     continue;
                 }
