@@ -11,6 +11,7 @@ use Icinga\Module\Perfdatagraphs\Model\PerfdataSeries;
 
 use Icinga\Application\Config;
 use Icinga\Application\Logger;
+use Icinga\Exception\QueryException;
 use Icinga\Util\Json;
 
 use DateInterval;
@@ -201,14 +202,14 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $parsedFrom = $this->parseDuration($now, $from);
 
         // The index for the query
-        $esql = sprintf("TS %s", $this->index);
+        $query = sprintf("TS %s", $this->index);
 
         // TODO: Do we need to escape the parameters for the TS query?
         // Icinga2 host/services names can be whatever.
 
         // The service or host filter
         if (!$isHostCheck) {
-            $esql .= sprintf(
+            $query .= sprintf(
                 "| WHERE resource.attributes.icinga2.host.name == \"%s\""
                     . " AND resource.attributes.icinga2.service.name == \"%s\""
                     . " AND resource.attributes.icinga2.command.name == \"%s\"",
@@ -217,7 +218,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                 $checkCommand,
             );
         } else {
-            $esql .= sprintf(
+            $query .= sprintf(
                 "| WHERE resource.attributes.icinga2.host.name == \"%s\""
                     . " AND resource.attributes.icinga2.command.name == \"%s\"",
                 $hostName,
@@ -225,11 +226,11 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             );
         }
 
-        $esql .= sprintf(" AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW()", $parsedFrom);
+        $query .= sprintf(" AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW()", $parsedFrom);
 
         // The aggregated values we want
         // Note, avg_threshold is expected in the parser. Ensure to update the parser if you update the name
-        $esql .= sprintf(
+        $query .= sprintf(
             " | STATS avg_threshold = AVG(AVG_OVER_TIME(metrics.state_check.threshold)),"
                 . "avg_perfdata = AVG(AVG_OVER_TIME(metrics.state_check.perfdata)) "
                 . "BY attributes.perfdata_label, attributes.threshold_type, attributes.unit, bucket = TBUCKET(%s seconds)",
@@ -237,15 +238,16 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         );
 
         // Sort and transforming the bucket timestamp to seconds
-        $esql .= "| EVAL bucket_epoch_s = TO_LONG(bucket) / 1000 | DROP bucket | SORT bucket_epoch_s";
+        $query .= "| EVAL bucket_epoch_s = TO_LONG(bucket) / 1000 | DROP bucket | SORT bucket_epoch_s";
 
         $pfr = new PerfdataResponse();
 
-        Logger::debug('Calling query API with query: %s', $esql);
-        $response = $this->query($esql);
+        Logger::debug('Calling query API with query: %s', $query);
 
-        if (is_array($response) && array_key_exists('error', $response)) {
-            $pfr->addError(Json::encode($response['error']));
+        try {
+            $response = $this->query($query);
+        } catch (QueryException $e) {
+            $pfr->addError($e);
             return $pfr;
         }
 
