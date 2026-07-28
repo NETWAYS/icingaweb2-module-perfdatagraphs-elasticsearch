@@ -11,6 +11,7 @@ use Icinga\Module\Perfdatagraphs\Model\PerfdataSeries;
 
 use Icinga\Application\Config;
 use Icinga\Application\Logger;
+use Icinga\Exception\QueryException;
 use Icinga\Util\Json;
 
 use DateTimeImmutable;
@@ -205,7 +206,7 @@ class ElasticsearchClient extends BaseClient implements ESInterface
                             [ 'term' => [ 'check_command.keyword' => $checkCommand ] ]
                         ],
                         'filter' => [
-                            'range' => [ 'timestamp' => [ 'gte' => $parsedFrom, 'lte' => 'now', ] ]
+                            'range' => [ '@timestamp' => [ 'gte' => $parsedFrom, 'lte' => 'now', ] ]
                         ],
                     ]
                 ]
@@ -236,10 +237,10 @@ class ElasticsearchClient extends BaseClient implements ESInterface
                 $params['body']['search_after'] = [$searchAfter];
             }
 
-            $response = $this->search($params);
-
-            if (array_key_exists('error', $response)) {
-                $pfr->addError(Json::encode($response['error']));
+            try {
+                $response = $this->search($params);
+            } catch (QueryException $e) {
+                $pfr->addError($e);
                 return $pfr;
             }
 
@@ -286,9 +287,6 @@ class ElasticsearchClient extends BaseClient implements ESInterface
             $hitCount = count($hits);
             // Note, can change this to array_last in the future
             $searchAfter = end($hits)['sort'][0] ?? null;
-
-            unset($response);
-            unset($hits);
         } while ($hitCount > 0);
 
         $seriesMap = [

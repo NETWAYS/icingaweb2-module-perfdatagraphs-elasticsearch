@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.1
+
+- Fix authentication and TLS config in status check
+
 ## v0.2.0
 
 - Raise minimum requirements to PHP 8.2

@@ -89,6 +89,7 @@ class Transformer
             // The timestamp for all labels is the same, so we only add a new ts if it increases.
             // There might be a better way to do this via the query?
             $ts = $record->getTimestamp();
+            // The query ensures timestamps are sorted
             if ($ts > $lastTS) {
                 $timestamps[] = $ts;
                 $lastTS = $ts;
@@ -96,7 +97,7 @@ class Transformer
 
             $dataset = $pfr->getDataset($label);
             // No, then create a new one
-            if (empty($dataset)) {
+            if ($dataset === null) {
                 $dataset = new PerfdataSet($label, '');
                 $pfr->addDataset($dataset);
             }
@@ -104,7 +105,7 @@ class Transformer
             $series = $dataset->getSeries();
             // Add series to the dataset if it exists
             foreach (['value', 'warning', 'critical'] as $key) {
-                if (!array_key_exists($key, $series)) {
+                if (!isset($series[$key])) {
                     $series[$key] = new PerfdataSeries($key);
                     $dataset->addSeries($series[$key]);
                 }

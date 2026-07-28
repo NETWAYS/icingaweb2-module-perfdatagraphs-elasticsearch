@@ -5,12 +5,15 @@ namespace Icinga\Module\Perfdatagraphselasticsearch\Client;
 use Icinga\Module\Perfdatagraphselasticsearch\Transport\Transport;
 
 use Icinga\Application\Logger;
+use Icinga\Exception\Json\JsonDecodeException;
+use Icinga\Exception\QueryException;
 use Icinga\Util\Json;
 
-use GuzzleHttp\Psr7\Request;
-use GuzzleHttp\Psr7\Query;
-use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Psr7\Query;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Response;
 
 use DateInterval;
 use DateTime;
@@ -64,7 +67,10 @@ abstract class BaseClient
         }
     }
 
-    public function search(array $params = [])
+    /**
+     * search runs the provided query against the Search REST API
+     */
+    public function search(array $params = []): array
     {
         $index = $this->extractArgument($params, 'index');
         $body = $this->extractArgument($params, 'body');
@@ -82,17 +88,26 @@ abstract class BaseClient
         $response = $this->transport->sendRequest($req);
         $responseBody = $response->getBody()->getContents();
 
+        if ($response->getStatusCode() !== 200) {
+            throw new QueryException('Failed to run query: %s', $responseBody);
+        }
+
+        $d = [];
         try {
             $d = Json::decode($responseBody, true);
         } catch (JsonDecodeException $e) {
-            Logger::error('Failed to decode response: %s', $e);
-            return [];
+            throw new QueryException('Failed to decode query response: %s', $e);
         }
 
         return $d;
     }
 
-    public function query(string $query = '')
+    /**
+     * query runs the provided query string against the ES|QL REST API
+     * with the CSV format.
+     * @throws QueryException
+     */
+    public function query(string $query = ''): Response
     {
         $uri = '_query?format=csv';
         $method = 'POST';
@@ -105,12 +120,12 @@ abstract class BaseClient
 
         if ($response->getStatusCode() !== 200) {
             try {
+                // We only want the contents if there's an error
+                // since we stream the response if OK
                 $responseBody = $response->getBody()->getContents();
-                $d = Json::decode($responseBody, true);
-                return $d;
+                throw new QueryException('Failed to run query: %s', $responseBody);
             } catch (JsonDecodeException $e) {
-                Logger::error('Failed to decode response: %s', $e);
-                return [];
+                throw new QueryException('Failed to decode query response: %s', $e);
             }
         }
 
@@ -158,6 +173,8 @@ abstract class BaseClient
             }
         }
 
+        // We're injecting the client-level options here to keep the
+        // status check simple. The other clients configure the HTTP client instead
         $req = new Request('GET', '/', $authOptions, null);
 
         try {
