@@ -5,6 +5,7 @@ namespace Icinga\Module\Perfdatagraphselasticsearch\Client;
 use Icinga\Module\Perfdatagraphselasticsearch\Transport\Transport;
 
 use Icinga\Application\Logger;
+use Icinga\Exception\Json\JsonDecodeException;
 use Icinga\Exception\QueryException;
 use Icinga\Util\Json;
 
@@ -166,6 +167,8 @@ abstract class BaseClient
             }
         }
 
+        // We're injecting the client-level options here to keep the
+        // status check simple. The other clients configure the HTTP client instead
         $req = new Request('GET', '/', $authOptions, null);
 
         try {

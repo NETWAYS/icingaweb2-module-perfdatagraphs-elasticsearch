@@ -287,9 +287,6 @@ class ElasticsearchClient extends BaseClient implements ESInterface
             $hitCount = count($hits);
             // Note, can change this to array_last in the future
             $searchAfter = end($hits)['sort'][0] ?? null;
-
-            unset($response);
-            unset($hits);
         } while ($hitCount > 0);
 
         $seriesMap = [
