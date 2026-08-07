@@ -107,7 +107,7 @@ final class Transport implements ClientInterface
             try {
                 $response = $this->client->sendRequest($req, ['stream' => $stream]);
                 return $response;
-            } catch (NetworkExceptionInterface $e) {
+            } catch (Exception $e) {
                 // Did not reach this host
                 $host->setReachable(false);
                 // Use the next host
