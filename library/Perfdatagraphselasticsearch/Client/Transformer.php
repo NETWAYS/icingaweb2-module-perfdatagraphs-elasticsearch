@@ -27,6 +27,7 @@ class Transformer
             return true;
         }
         foreach ($includeMetrics as $pattern) {
+            // Note, we could optimize this by "caching" already matched metric names
             if (fnmatch($pattern, $metricname)) {
                 return true;
             }
