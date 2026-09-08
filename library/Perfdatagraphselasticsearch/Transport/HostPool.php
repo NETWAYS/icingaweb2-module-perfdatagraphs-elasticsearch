@@ -24,6 +24,10 @@ class HostPool implements HostPoolInterface
         $this->client = $client;
     }
 
+    /**
+     * setHosts sets and overrides the hosts for this pool
+     * @param array $hosts the hosts for this pool
+     */
     public function setHosts(array $hosts): self
     {
         $this->hosts = [];
