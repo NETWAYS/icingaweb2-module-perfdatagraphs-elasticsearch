@@ -13,8 +13,6 @@ class Host
     protected Uri $url;
     // Is this host reachable
     protected bool $reachable = true;
-    // When was this host last reached
-    protected ?int $lastReachedTimestamp = null;
 
     public function __construct(string $url)
     {
@@ -34,15 +32,5 @@ class Host
     public function setReachable(bool $reachable): void
     {
         $this->reachable = $reachable;
-    }
-
-    public function getLastReached(): ?int
-    {
-        return $this->lastReachedTimestamp;
-    }
-
-    public function setLastReached(int $ts): void
-    {
-        $this->lastReachedTimestamp = $ts;
     }
 }

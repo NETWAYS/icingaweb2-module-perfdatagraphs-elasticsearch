@@ -12,7 +12,7 @@ interface HostPoolInterface
     public function next(RequestInterface $request): Host;
 
     /**
-     * setHosts set the list of hosts of this pool
+     * setHosts sets the list of hosts of this pool
      *
      * @param array $hosts list of hosts for this HostPool
      */
