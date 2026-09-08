@@ -53,7 +53,7 @@ class HostPool implements HostPoolInterface
 
         try {
             $response = $this->client->sendRequest($request);
-            return $response->getStatusCode() === 200;
+            return $response->getStatusCode() < 400;
         } catch (Exception $e) {
             return false;
         }
