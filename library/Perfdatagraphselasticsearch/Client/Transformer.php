@@ -77,7 +77,6 @@ class Transformer
 
         $timestamps = [];
 
-        $lastTS = 0;
         foreach ($stream->each() as $record) {
             $label = $record->getLabel();
 
@@ -87,23 +86,18 @@ class Transformer
             if (self::isExcluded($label, $excludeMetrics)) {
                 continue;
             }
-            // The timestamp for all labels is the same, so we only add a new ts if it increases.
-            // There might be a better way to do this via the query?
-            $ts = $record->getTimestamp();
-            // The query ensures timestamps are sorted
-            if ($ts > $lastTS) {
-                $timestamps[] = $ts;
-                $lastTS = $ts;
-            }
 
             $dataset = $pfr->getDataset($label);
             // No, then create a new one
             if ($dataset === null) {
-                $dataset = new PerfdataSet($label, '');
+                $dataset = new PerfdataSet($label, $record->getUnit());
                 $pfr->addDataset($dataset);
             }
 
+            $dataset->addTimestamp($record->getTimestamp());
+
             $series = $dataset->getSeries();
+
             // Add series to the dataset if it exists
             foreach (['value', 'warning', 'critical'] as $key) {
                 if (!isset($series[$key])) {
@@ -114,25 +108,14 @@ class Transformer
 
             [$values, $warns, $crits] = [$series['value'], $series['warning'], $series['critical']];
 
-            $unit = $record->getUnit();
-            if ($unit !== '') {
-                $dataset->setUnit($record->getUnit());
-            }
-
-            $type = $record->getRecordType();
-
-            match ($type) {
-                'value' => $values->addValue($record->getValue()),
-                'warning' => $warns->addValue($record->getWarning()),
-                'critical' => $crits->addValue($record->getCritical()),
-                default => null,
-            };
+            $values->addValue($record->getValue());
+            $warns->addValue($record->getWarning());
+            $crits->addValue($record->getCritical());
         }
 
         // Remove the empty series from the datasets
         $ds = $pfr->getDatasets();
         foreach ($ds as $dataset) {
-            $dataset->setTimestamps($timestamps);
             $series = $dataset->getSeries();
             foreach ($series as $s) {
                 if ($s->isEmpty()) {
