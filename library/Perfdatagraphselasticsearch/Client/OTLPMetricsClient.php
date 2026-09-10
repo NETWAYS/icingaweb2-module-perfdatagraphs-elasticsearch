@@ -229,17 +229,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
 
         $query .= sprintf(" AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW()", $parsedFrom);
 
-        // The aggregated values we want
-        // Note, avg_threshold is expected in the parser. Ensure to update the parser if you update the name
-        $query .= sprintf(
-            " | STATS avg_threshold = AVG(AVG_OVER_TIME(metrics.state_check.threshold)),"
-                . "avg_perfdata = AVG(AVG_OVER_TIME(metrics.state_check.perfdata)) "
-                . "BY attributes.perfdata_label, attributes.threshold_type, attributes.unit, bucket = TBUCKET(%s seconds)",
-            $step,
-        );
-
-        // Sort and transforming the bucket timestamp to seconds
-        $query .= "| EVAL bucket_epoch_s = TO_LONG(bucket) / 1000 | DROP bucket | SORT bucket_epoch_s";
+        $query .= "| EVAL epoch_seconds = TO_LONG(@timestamp) / 1000 | KEEP epoch_seconds, metrics.state_check.threshold, metrics.state_check.perfdata, attributes.perfdata_label, attributes.threshold_type, attributes.unit, @timestamp | SORT @timestamp ASC";
 
         $pfr = new PerfdataResponse();
 
