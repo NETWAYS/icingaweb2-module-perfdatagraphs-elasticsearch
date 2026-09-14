@@ -24,7 +24,7 @@ class EsqlCsvParser
 
     public function each()
     {
-        // avg_threshold,avg_perfdata,attributes.perfdata_label,attributes.threshold_type,bucket_epoch_s
+        // avg_threshold,avg_perfdata,attributes.perfdata_label,attributes.threshold_type,unit,bucket_epoch_s
         // 0.0,,load1,min,1783430880
         // ,0.09,load1,,1783430880
         // 3.0,,load15,warning,1783430880

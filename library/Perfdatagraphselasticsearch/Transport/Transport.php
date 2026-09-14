@@ -46,7 +46,7 @@ final class Transport implements ClientInterface
 
     public function setRetries(int $n): self
     {
-        if ($n < 0) {
+        if ($n <= 0) {
             throw new InvalidArgumentException('Retries must be a positive integer');
         }
 

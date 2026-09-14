@@ -118,15 +118,12 @@ abstract class BaseClient
 
         $response = $this->transport->sendRequest($req, true);
 
-        if ($response->getStatusCode() !== 200) {
-            try {
-                // We only want the contents if there's an error
-                // since we stream the response if OK
-                $responseBody = $response->getBody()->getContents();
-                throw new QueryException('Failed to run query: %s', $responseBody);
-            } catch (JsonDecodeException $e) {
-                throw new QueryException('Failed to decode query response: %s', $e);
-            }
+        // We only want the contents if there's an error otherwise we stream the response
+        // Not the prettiest solution, but works for now.
+        if ($response->getStatusCode() >= 400) {
+            $responseBody = $response->getBody()->getContents();
+            // We just pack the error response in an exception and the caller needs to handle it
+            throw new QueryException('Failed to run query: %s', $responseBody);
         }
 
         return $response;

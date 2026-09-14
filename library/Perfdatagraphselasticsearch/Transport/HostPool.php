@@ -24,6 +24,10 @@ class HostPool implements HostPoolInterface
         $this->client = $client;
     }
 
+    /**
+     * setHosts sets and overrides the hosts for this pool
+     * @param array $hosts the hosts for this pool
+     */
     public function setHosts(array $hosts): self
     {
         $this->hosts = [];
@@ -53,7 +57,7 @@ class HostPool implements HostPoolInterface
 
         try {
             $response = $this->client->sendRequest($request);
-            return $response->getStatusCode() === 200;
+            return $response->getStatusCode() < 400;
         } catch (Exception $e) {
             return false;
         }
