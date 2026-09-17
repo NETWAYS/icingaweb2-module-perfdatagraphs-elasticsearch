@@ -7,35 +7,27 @@ namespace Icinga\Module\Perfdatagraphselasticsearch\Client;
  */
 class EsqlRecord
 {
-    protected string $recordType;
+    protected string $Id;
     protected string $label;
     protected int $timestamp;
-    protected ?float $value;
-    protected ?float $warning;
-    protected ?float $critical;
-    protected ?string $unit;
+    protected ?float $value = null;
+    protected ?float $warning = null;
+    protected ?float $critical = null;
+    protected string $unit = '';
 
     public function __construct(
-        string $recordType,
+        string $Id,
         string $label,
         int $timestamp,
-        ?float $value,
-        ?float $warn,
-        ?float $crit,
-        ?string $unit,
     ) {
-        $this->recordType = $recordType;
+        $this->Id = $Id;
         $this->label = $label;
         $this->timestamp = $timestamp;
-        $this->value = $value;
-        $this->warning = $warn;
-        $this->critical = $crit;
-        $this->unit = $unit;
     }
 
-    public function getRecordType(): string
+    public function getId(): string
     {
-        return $this->recordType;
+        return $this->Id;
     }
 
     public function getLabel(): string
@@ -48,9 +40,19 @@ class EsqlRecord
         return $this->timestamp;
     }
 
+    public function setValue(float $value): void
+    {
+        $this->value = $value;
+    }
+
     public function getValue(): ?float
     {
         return $this->value;
+    }
+
+    public function setWarning(float $warning): void
+    {
+        $this->warning = $warning;
     }
 
     public function getWarning(): ?float
@@ -58,9 +60,19 @@ class EsqlRecord
         return $this->warning;
     }
 
+    public function setCritical(float $critical): void
+    {
+        $this->critical = $critical;
+    }
+
     public function getCritical(): ?float
     {
         return $this->critical;
+    }
+
+    public function setUnit(string $unit): void
+    {
+        $this->unit = $unit;
     }
 
     public function getUnit(): ?string

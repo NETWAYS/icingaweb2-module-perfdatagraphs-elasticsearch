@@ -27,11 +27,14 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
 {
     protected readonly string $index;
 
+    protected readonly bool $useTsAggregation;
+
     public function __construct(
         string $urls,
         int $maxDataPoints,
         int $timeout,
         bool $tlsVerify,
+        bool $tsAggregation = true,
         string $index = '.ds-metrics-generic.otel-default-*',
         array $auth = [],
     ) {
@@ -69,6 +72,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $this->index = $index;
         $this->transport = $transport;
         $this->maxDataPoints = $maxDataPoints;
+        $this->useTsAggregation = $tsAggregation;
     }
 
     /**
@@ -94,6 +98,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             'api_auth_mtls_key' => '',
             'api_auth_mtls_ca' => '',
             'api_tls_insecure' => false,
+            'api_timeseries_aggregation' => true,
         ];
 
         // Try to load the configuration
@@ -103,7 +108,15 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
                 $moduleConfig = Config::module('perfdatagraphselasticsearch');
             } catch (Exception $e) {
                 Logger::error('Failed to load Perfdata Graphs Elasticsearch module configuration: %s', $e);
-                return new static($default['api_url'], $default['api_max_data_points'], 10, true, 'icinga2', []);
+                return new static(
+                    urls: $default['api_url'],
+                    maxDataPoints: 1000,
+                    timeout: 10,
+                    tlsVerify: tue,
+                    tsAggregation: true,
+                    index: 'icinga2',
+                    auth: []
+                );
             }
         }
 
@@ -126,6 +139,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
         $tlsVerify = !(bool) $moduleConfig->get('elasticsearch', 'api_tls_insecure', $default['api_tls_insecure']);
         $maxDataPoints = (int) $moduleConfig->get('elasticsearch', 'api_max_data_points', $default['api_max_data_points']);
+        $tsAggregation = (bool) $moduleConfig->get('elasticsearch', 'api_timeseries_aggregation', $default['api_timeseries_aggregation']);
 
         $auth = [
             'method' => strtolower($authMethod),
@@ -144,6 +158,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
             maxDataPoints: $maxDataPoints,
             timeout: $timeout,
             tlsVerify: $tlsVerify,
+            tsAggregation: $tsAggregation,
             index: $index,
             auth: $auth
         );
@@ -169,6 +184,105 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $stepSeconds = max($stepSeconds, $minStep);
 
         return (int)ceil($stepSeconds);
+    }
+
+    /**
+     * buildQueryWithAggregation generates the ES|QL TS query to fetch the data with TBUCKET aggregation
+     */
+    protected function buildQueryWithAggregation(
+        string $hostName,
+        string $serviceName,
+        string $checkCommand,
+        string $from,
+        bool $isHostCheck,
+        int $step,
+    ): string {
+        // The index for the query
+        $query = sprintf("TS %s", $this->index);
+
+        // The service or host filter
+        if (!$isHostCheck) {
+            $query .= sprintf(
+                "| WHERE resource.attributes.icinga2.host.name == \"%s\""
+                    . " AND resource.attributes.icinga2.service.name == \"%s\""
+                    . " AND resource.attributes.icinga2.command.name == \"%s\"",
+                $hostName,
+                $serviceName,
+                $checkCommand,
+            );
+        } else {
+            $query .= sprintf(
+                "| WHERE resource.attributes.icinga2.host.name == \"%s\""
+                    . " AND resource.attributes.icinga2.command.name == \"%s\"",
+                $hostName,
+                $checkCommand,
+            );
+        }
+
+        $query .= sprintf(" AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW()", $from);
+
+        // The aggregated values we want
+        $query .= sprintf(
+            " | STATS metrics.state_check.threshold_avg = AVG(AVG_OVER_TIME(metrics.state_check.threshold)),"
+                . "metrics.state_check.perfdata_avg = AVG(AVG_OVER_TIME(metrics.state_check.perfdata)) "
+                . "BY attributes.perfdata_label, attributes.threshold_type, attributes.unit, bucket = TBUCKET(%s seconds)",
+            $step,
+        );
+
+        // Sort and transforming the bucket timestamp to seconds. Note that, the KEEP order matters for the parser
+        // Hint: ESQL uses an implicit LIMIT 1000 if nothing is set. As of ES9.3 the ESQL does not support pagination yet.
+        // https://github.com/elastic/elasticsearch/issues/100000
+        // I think the upper limit for TS aggregations is 10,000,000 - If I understand this correctly:
+        // https://www.elastic.co/docs/reference/query-languages/esql/limitations#esql-max-rows
+        $query .= " | LIMIT 1000000 | EVAL epoch_seconds = TO_LONG(bucket) / 1000 "
+            . " | KEEP epoch_seconds, metrics.state_check.threshold_avg, metrics.state_check.perfdata_avg, attributes.perfdata_label, attributes.threshold_type, attributes.unit"
+            . " | SORT epoch_seconds ASC, attributes.perfdata_label, attributes.unit DESC";
+
+        return $query;
+    }
+
+    /**
+     * buildQuery generates the ES|QL TS query to fetch the data
+     */
+    protected function buildQuery(
+        string $hostName,
+        string $serviceName,
+        string $checkCommand,
+        string $from,
+        bool $isHostCheck,
+    ): string {
+        // The index for the query
+        $query = sprintf("TS %s", $this->index);
+
+        // The service or host filter
+        if (!$isHostCheck) {
+            $query .= sprintf(
+                "| WHERE resource.attributes.icinga2.host.name == \"%s\""
+                    . " AND resource.attributes.icinga2.service.name == \"%s\""
+                    . " AND resource.attributes.icinga2.command.name == \"%s\"",
+                $hostName,
+                $serviceName,
+                $checkCommand,
+            );
+        } else {
+            $query .= sprintf(
+                "| WHERE resource.attributes.icinga2.host.name == \"%s\""
+                    . " AND resource.attributes.icinga2.command.name == \"%s\"",
+                $hostName,
+                $serviceName,
+            );
+        }
+
+        // Sort and transforming the bucket timestamp to seconds. Note that, the KEEP order matters for the parser
+        // Hint: ESQL uses an implicit LIMIT 1000 if nothing is set. As of ES9.3 the ESQL does not support pagination yet.
+        // https://github.com/elastic/elasticsearch/issues/100000
+        $query .= sprintf(" AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW() | LIMIT 10000", $from);
+
+        $query .= "| EVAL epoch_seconds = TO_LONG(@timestamp) / 1000 "
+            . " | KEEP epoch_seconds, metrics.state_check.threshold, metrics.state_check.perfdata, attributes.perfdata_label, attributes.threshold_type, attributes.unit, @timestamp "
+            . " | SORT @timestamp ASC, attributes.perfdata_label, attributes.unit DESC";
+
+        return $query;
     }
 
     /**
@@ -201,45 +315,30 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         $step = $this->calculateSteps($start, $end, $this->maxDataPoints, $checkInterval);
         $parsedFrom = $this->parseDuration($now, $from);
 
-        // The index for the query
-        $query = sprintf("TS %s", $this->index);
         // Escape double quotes and backslashes to prevent breaking the ESQL
         $escapedHost = addcslashes($hostName, '"\\');
         $escapedService = addcslashes($serviceName, '"\\');
         $escapedCommand = addcslashes($checkCommand, '"\\');
 
-        // The service or host filter
-        if (!$isHostCheck) {
-            $query .= sprintf(
-                "| WHERE resource.attributes.icinga2.host.name == \"%s\""
-                    . " AND resource.attributes.icinga2.service.name == \"%s\""
-                    . " AND resource.attributes.icinga2.command.name == \"%s\"",
-                $escapedHost,
-                $escapedService,
-                $escapedCommand,
+        // Check to see which query we're using
+        if ($this->useTsAggregation) {
+            $query = $this->buildQueryWithAggregation(
+                hostName: $escapedHost,
+                serviceName: $escapedService,
+                checkCommand: $escapedCommand,
+                from: $parsedFrom,
+                isHostCheck: $isHostCheck,
+                step: $step,
             );
         } else {
-            $query .= sprintf(
-                "| WHERE resource.attributes.icinga2.host.name == \"%s\""
-                    . " AND resource.attributes.icinga2.command.name == \"%s\"",
-                $escapedHost,
-                $escapedCommand,
+            $query = $this->buildQuery(
+                hostName: $escapedHost,
+                serviceName: $escapedService,
+                checkCommand: $escapedCommand,
+                from: $parsedFrom,
+                isHostCheck: $isHostCheck,
             );
         }
-
-        $query .= sprintf(" AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW()", $parsedFrom);
-
-        // The aggregated values we want
-        // Note, avg_threshold is expected in the parser. Ensure to update the parser if you update the name
-        $query .= sprintf(
-            " | STATS avg_threshold = AVG(AVG_OVER_TIME(metrics.state_check.threshold)),"
-                . "avg_perfdata = AVG(AVG_OVER_TIME(metrics.state_check.perfdata)) "
-                . "BY attributes.perfdata_label, attributes.threshold_type, attributes.unit, bucket = TBUCKET(%s seconds)",
-            $step,
-        );
-
-        // Sort and transforming the bucket timestamp to seconds
-        $query .= "| EVAL bucket_epoch_s = TO_LONG(bucket) / 1000 | DROP bucket | SORT bucket_epoch_s";
 
         $pfr = new PerfdataResponse();
 
