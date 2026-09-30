@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.0
+
+- Add option to toggle TS aggregation
+- Use more broad exception in retry for multiple Elasticsearch hosts
+- Improve error handling for queries
+- Improve documentation
+
 ## v0.2.1
 
 - Fix authentication and TLS config in status check
