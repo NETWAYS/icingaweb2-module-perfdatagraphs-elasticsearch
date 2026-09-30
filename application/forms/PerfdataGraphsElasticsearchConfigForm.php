@@ -145,16 +145,24 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
             Zend_Validate_Callback::INVALID_VALUE
         );
 
-        $this->addElement('number', 'elasticsearch_api_max_data_points', [
-            'label' => t('The maximum numbers of datapoints each series returns'),
-            'description' => t(
-                'The maximum numbers of datapoints each series returns.'
-                    . ' Only used in the OTLPMetricsWriter. The module will use this in the TBUCKET query downsample the data.'
-            ),
-            'required' => false,
-            'placeholder' => 10000,
-            'validators' => [$greaterThanValidator],
-        ]);
+        if (isset($formData['elasticsearch_icinga_writer']) && $formData['elasticsearch_icinga_writer'] === 'OTLPMetricsWriter') {
+            $this->addElement('checkbox', 'elasticsearch_api_timeseries_aggregation', [
+                'value' => (bool) $this->config->get('elasticsearch', 'api_timeseries_aggregation', true),
+                'description' => t('Use ES|QL timeseries aggregation. Only used in the OTLPMetricsWriter.'),
+                'label' => t('Use ES|QL timeseries aggregation')
+            ]);
+
+            $this->addElement('number', 'elasticsearch_api_max_data_points', [
+                'label' => t('The maximum numbers of datapoints each series returns'),
+                'description' => t(
+                    'The maximum numbers of datapoints each series returns.'
+                        . ' Only used in the OTLPMetricsWriter. The module will use this in the TBUCKET query downsample the data.'
+                ),
+                'required' => false,
+                'placeholder' => 10000,
+                'validators' => [$greaterThanValidator],
+            ]);
+        }
     }
 
     public function addSubmitButton()
@@ -242,6 +250,7 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
         $index = $form->getValue('elasticsearch_api_index', 'icinga2');
         // Hint: We use a "skip TLS" logic in the UI, but Guzzle uses "verify TLS"
         $tlsVerify = !(bool) $form->getValue('elasticsearch_api_tls_insecure', false);
+        $tsAggregation = (bool) $form->getValue('elasticsearch_api_timeseries_aggregation', true);
         $maxDataPoints = (int) $form->getValue('elasticsearch_api_max_data_points', 10000);
         // Auth values
         $authMethod = $form->getValue('elasticsearch_api_auth_method', 'none');
@@ -282,6 +291,7 @@ class PerfdataGraphsElasticsearchConfigForm extends ConfigForm
                 maxDataPoints: $maxDataPoints,
                 timeout: $timeout,
                 tlsVerify: $tlsVerify,
+                tsAggregation: $tsAggregation,
                 index: $index,
                 auth: $auth
             );
