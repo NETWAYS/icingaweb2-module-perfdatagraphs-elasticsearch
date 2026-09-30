@@ -85,7 +85,7 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
     {
         $default = [
             'api_url' => 'http://localhost:9200',
-            'api_index' => 'icinga2',
+            'api_index' => '.ds-metrics-generic.otel-default-*',
             'api_timeout' => 10,
             'api_max_data_points' => 10000,
             'api_auth_method' => 'none',
@@ -104,15 +104,15 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         // Try to load the configuration
         if ($moduleConfig === null) {
             try {
-                Logger::debug('Loaded Perfdata Graphs Elasticsearch module configuration to get Config');
                 $moduleConfig = Config::module('perfdatagraphselasticsearch');
+                Logger::debug('Loaded Perfdata Graphs Elasticsearch module configuration to get Config');
             } catch (Exception $e) {
                 Logger::error('Failed to load Perfdata Graphs Elasticsearch module configuration: %s', $e);
                 return new static(
                     urls: $default['api_url'],
-                    maxDataPoints: 1000,
+                    maxDataPoints: 10000,
                     timeout: 10,
-                    tlsVerify: tue,
+                    tlsVerify: true,
                     tsAggregation: true,
                     index: 'icinga2',
                     auth: []
