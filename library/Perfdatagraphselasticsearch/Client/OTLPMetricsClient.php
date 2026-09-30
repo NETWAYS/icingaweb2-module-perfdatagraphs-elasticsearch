@@ -230,11 +230,11 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         );
 
         // Sort and transforming the bucket timestamp to seconds. Note that, the KEEP order matters for the parser
-        // Hint: ESQL uses an implicit LIMIT 1000 if nothing is set. As of ES9.3 the ESQL does not support pagination yet.
-        // https://github.com/elastic/elasticsearch/issues/100000
+        // Hint: ESQL uses an implicit LIMIT 1000 if nothing is set. As of ES9.3 the ESQL does not support pagination yet: https://github.com/elastic/elasticsearch/issues/100000
         // I think the upper limit for TS aggregations is 10,000,000 - If I understand this correctly:
         // https://www.elastic.co/docs/reference/query-languages/esql/limitations#esql-max-rows
-        $query .= " | LIMIT 1000000 | EVAL epoch_seconds = TO_LONG(bucket) / 1000 "
+        // TODO: We use a fixed higher LIMIT for now, pagination would be the best long-term solution
+        $query .= " | LIMIT 100000 | EVAL epoch_seconds = TO_LONG(bucket) / 1000 "
             . " | KEEP epoch_seconds, metrics.state_check.threshold_avg, metrics.state_check.perfdata_avg, attributes.perfdata_label, attributes.threshold_type, attributes.unit"
             . " | SORT epoch_seconds ASC, attributes.perfdata_label, attributes.unit DESC";
 
@@ -276,7 +276,8 @@ class OTLPMetricsClient extends BaseClient implements ESInterface
         // Sort and transforming the bucket timestamp to seconds. Note that, the KEEP order matters for the parser
         // Hint: ESQL uses an implicit LIMIT 1000 if nothing is set. As of ES9.3 the ESQL does not support pagination yet.
         // https://github.com/elastic/elasticsearch/issues/100000
-        $query .= sprintf(" AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW() | LIMIT 10000", $from);
+        // TODO: We use a fixed higher LIMIT for now, pagination would be the best long-term solution
+        $query .= sprintf(" AND @timestamp >= TO_DATETIME(\"%s\") AND @timestamp <= NOW() | LIMIT 100000", $from);
 
         $query .= "| EVAL epoch_seconds = TO_LONG(@timestamp) / 1000 "
             . " | KEEP epoch_seconds, metrics.state_check.threshold, metrics.state_check.perfdata, attributes.perfdata_label, attributes.threshold_type, attributes.unit, @timestamp "
