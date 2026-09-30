@@ -56,13 +56,35 @@ That means, a higher value means a more buckets (more granularity) and a lower v
 
 Example query with `api_timeseries_aggregation` active:
 
-> TS .ds-metrics-generic.otel* | WHERE resource.attributes.icinga2.host.name == "MyHost" AND resource.attributes.icinga2.command.name == "hostalive" AND @timestamp >= TO_DATETIME("2026-09-29T22:32:52") AND @timestamp <= NOW() | STATS metrics.state_check.threshold_avg = AVG(AVG_OVER_TIME(metrics.state_check.threshold)),metrics.state_check.perfdata_avg = AVG(AVG_OVER_TIME(metrics.state_check.perfdata)) BY attributes.perfdata_label, attributes.threshold_type, attributes.unit, bucket = TBUCKET(60 seconds) | LIMIT 100000 | EVAL epoch_seconds = TO_LONG(bucket) / 1000 | KEEP epoch_seconds, metrics.state_check.threshold_avg, metrics.state_check.perfdata_avg, attributes.perfdata_label, attributes.threshold_type, attributes.unit | SORT epoch_seconds ASC, attributes.perfdata_label, attributes.unit DESC
+```
+TS .ds-metrics-generic.otel*
+| WHERE resource.attributes.icinga2.host.name == "MyHost"
+    AND resource.attributes.icinga2.command.name == "hostalive"
+    AND @timestamp >= TO_DATETIME("2026-09-29T22:32:52") AND @timestamp <= NOW()
+| STATS metrics.state_check.threshold_avg = AVG(AVG_OVER_TIME(metrics.state_check.threshold)),
+        metrics.state_check.perfdata_avg = AVG(AVG_OVER_TIME(metrics.state_check.perfdata)) BY attributes.perfdata_label, attributes.threshold_type, attributes.unit,
+        bucket = TBUCKET(60 seconds) // This value is dynamically adjusted depending on the api_max_data_points
+| LIMIT 100000
+| EVAL epoch_seconds = TO_LONG(bucket) / 1000
+| KEEP epoch_seconds, metrics.state_check.threshold_avg, metrics.state_check.perfdata_avg, attributes.perfdata_label, attributes.threshold_type, attributes.unit
+| SORT epoch_seconds ASC, attributes.perfdata_label, attributes.unit DESC
+```
 
 When `api_timeseries_aggregation` is disabled the module will use a simple ESQL query without any aggregation. This can be used when you are using internal downsampling mechanisms in Elasticsearch.
 
 Example query with `api_timeseries_aggregation` disabled:
 
-> TS .ds-metrics-generic.otel* | WHERE resource.attributes.icinga2.host.name == "MyHost" AND resource.attributes.icinga2.command.name == "hostalive" AND @timestamp >= TO_DATETIME("2026-09-29T22:32:17") AND @timestamp <= NOW() | LIMIT 1000000 | EVAL epoch_seconds = TO_LONG(@timestamp) / 1000 | KEEP epoch_seconds, metrics.state_check.threshold, metrics.state_check.perfdata, attributes.perfdata_label, attributes.threshold_type, attributes.unit, @timestamp  | SORT @timestamp ASC, attributes.perfdata_label, attributes.unit DESC
+```
+TS .ds-metrics-generic.otel*
+| WHERE resource.attributes.icinga2.host.name == "MyHost"
+    AND resource.attributes.icinga2.command.name == "hostalive"
+    AND @timestamp >= TO_DATETIME("2026-09-29T22:32:17")
+    AND @timestamp <= NOW()
+| LIMIT 100000
+| EVAL epoch_seconds = TO_LONG(@timestamp) / 1000
+| KEEP epoch_seconds, metrics.state_check.threshold, metrics.state_check.perfdata, attributes.perfdata_label, attributes.threshold_type, attributes.unit, @timestamp
+| SORT @timestamp ASC, attributes.perfdata_label, attributes.unit DESC
+```
 
 Note that, ESQL currently has fixed 10,000 row limit:
 
