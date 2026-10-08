@@ -40,7 +40,7 @@ class EsqlRecord
         return $this->timestamp;
     }
 
-    public function setValue(float $value): void
+    public function setValue(?float $value): void
     {
         $this->value = $value;
     }
@@ -50,7 +50,7 @@ class EsqlRecord
         return $this->value;
     }
 
-    public function setWarning(float $warning): void
+    public function setWarning(?float $warning): void
     {
         $this->warning = $warning;
     }
@@ -60,7 +60,7 @@ class EsqlRecord
         return $this->warning;
     }
 
-    public function setCritical(float $critical): void
+    public function setCritical(?float $critical): void
     {
         $this->critical = $critical;
     }
